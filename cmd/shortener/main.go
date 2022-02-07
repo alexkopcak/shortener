@@ -80,6 +80,10 @@ func processing(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "text/plain")
 			var byteArray = []byte(urlValue)
 			_, err = w.Write(byteArray)
+			if err != nil {
+				http.Error(w, "Something went wrong", http.StatusBadRequest)
+				return
+			}
 			break
 		}
 	default:
