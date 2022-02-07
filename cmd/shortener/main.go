@@ -15,25 +15,25 @@ type dictionary struct {
 	nextValue int
 }
 
-func (dic *dictionary) addUrl(urlValue string) string {
-	sUrlValue, ok := dic.items[urlValue]
-	if ok == false {
-		sUrlValue = dic.nextValue
+func (dic *dictionary) addURL(value string) string {
+	sURLValue, ok := dic.items[value]
+	if ok {
+		sURLValue = dic.nextValue
 		dic.nextValue++
-		dic.items[urlValue] = sUrlValue
+		dic.items[value] = sURLValue
 	}
-	return strconv.Itoa(sUrlValue)
+	return strconv.Itoa(sURLValue)
 }
 
-func (dic *dictionary) getUrl(shortUrlValue string) string {
-	shortUrlValueString, err := strconv.Atoi(shortUrlValue)
+func (dic *dictionary) getURL(shortValue string) string {
+	shortURLValueString, err := strconv.Atoi(shortValue)
 
 	if err != nil {
 		return ""
 	}
 
 	for key, value := range dic.items {
-		if value == shortUrlValueString {
+		if value == shortURLValueString {
 			return key
 		}
 	}
@@ -44,17 +44,17 @@ func processing(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		{
-			reqUrlValue := r.URL.Path[len("/"):]
+			requestValue := r.URL.Path[len("/"):]
 
-			sUrlValue := dic.getUrl(reqUrlValue)
-			if sUrlValue == "" {
+			shortURLValue := dic.getURL(requestValue)
+			if shortURLValue == "" {
 				http.Error(w, "There are no any short Urls", http.StatusBadRequest)
 				return
 			}
 
-			fmt.Println("GET", reqUrlValue, sUrlValue)
+			fmt.Println("GET", requestValue, shortURLValue)
 
-			w.Header().Set("Location", sUrlValue)
+			w.Header().Set("Location", shortURLValue)
 			w.WriteHeader(http.StatusTemporaryRedirect) // 307
 			break
 		}
@@ -72,13 +72,13 @@ func processing(w http.ResponseWriter, r *http.Request) {
 			}
 
 			bodyString := string(bodyRaw)
-			urlValue := dic.addUrl(bodyString)
+			requestValue := dic.addURL(bodyString)
 
-			fmt.Println("POST", bodyString, urlValue)
+			fmt.Println("POST", bodyString, requestValue)
 
 			w.WriteHeader(http.StatusCreated) // 201
 			w.Header().Set("Content-Type", "text/plain")
-			var byteArray = []byte(urlValue)
+			var byteArray = []byte(requestValue)
 			_, err = w.Write(byteArray)
 			if err != nil {
 				http.Error(w, "Something went wrong", http.StatusBadRequest)
