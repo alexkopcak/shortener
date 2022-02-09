@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 )
 
 var dic dictionary
@@ -17,11 +18,12 @@ type dictionary struct {
 
 func (dic *dictionary) addURL(value string) string {
 	sURLValue, ok := dic.items[value]
-	if ok {
+	if !ok {
 		sURLValue = dic.nextValue
 		dic.nextValue++
 		dic.items[value] = sURLValue
 	}
+
 	return strconv.Itoa(sURLValue)
 }
 
@@ -41,12 +43,20 @@ func (dic *dictionary) getURL(shortValue string) string {
 }
 
 func processing(w http.ResponseWriter, r *http.Request) {
+	//fmt.Fprintf(os.Stdout, "%v", dic)
+	//fmt.Println(r)
 	switch r.Method {
 	case http.MethodGet:
 		{
 			requestValue := r.URL.Path[len("/"):]
+			fmt.Println(requestValue)
+			if requestValue == "" || strings.Contains(requestValue, "/") {
+				http.Error(w, "Empty URL", http.StatusBadRequest)
+				return
+			}
 
 			shortURLValue := dic.getURL(requestValue)
+			fmt.Println(shortURLValue)
 			if shortURLValue == "" {
 				http.Error(w, "There are no any short Urls", http.StatusBadRequest)
 				return
@@ -73,12 +83,12 @@ func processing(w http.ResponseWriter, r *http.Request) {
 
 			bodyString := string(bodyRaw)
 			requestValue := dic.addURL(bodyString)
+			shortURL := "http://localhost:8080/" + requestValue
 
-			fmt.Println("POST", bodyString, requestValue)
+			fmt.Println("POST", bodyString, shortURL)
 
 			w.WriteHeader(http.StatusCreated) // 201
-			w.Header().Set("Content-Type", "text/plain")
-			var byteArray = []byte(requestValue)
+			var byteArray = []byte(shortURL)
 			_, err = w.Write(byteArray)
 			if err != nil {
 				http.Error(w, "Something went wrong", http.StatusBadRequest)
@@ -93,14 +103,15 @@ func processing(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	http.HandleFunc("/", processing)
-	server := &http.Server{
-		Addr: "localhost:8080",
-	}
+	writer := os.Stdout
 	dic.items = make(map[string]int)
 	dic.nextValue = 0
 
-	writer := os.Stdout
+	server := &http.Server{
+		Addr: "localhost:8080",
+	}
+	http.HandleFunc("/", processing)
+
 	_, err := fmt.Fprintln(writer, server.ListenAndServe())
 	if err != nil {
 		fmt.Println(err.Error())
