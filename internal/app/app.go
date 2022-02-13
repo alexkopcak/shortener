@@ -11,20 +11,18 @@ import (
 
 func Run() {
 	// Repository
-	var dic storage.Dictionary
-	dic.Items = make(map[string]int)
-	dic.NextValue = 0
+	var dictionary storage.Dictionary
+	dictionary.Items = make(map[string]int)
+	dictionary.NextValue = 0
 
 	//HTTP Server
-	writer := os.Stdout
-
 	server := &http.Server{
 		Addr: "localhost:8080",
 	}
-	h := new(hand.Handler)
-	h.Store = &dic
-	http.Handle("/", h)
+	http.HandleFunc("/", hand.URLHandler(&dictionary))
 
+	// start server
+	writer := os.Stdout
 	_, err := fmt.Fprintln(writer, server.ListenAndServe())
 	if err != nil {
 		fmt.Println(err.Error())
