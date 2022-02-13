@@ -18,6 +18,24 @@ func TestDictionary_AddURL(t *testing.T) {
 		args   args
 		want   string
 	}{
+		{
+			name: "simple storage test #1",
+			fields: fields{
+				Items:     map[string]int{},
+				NextValue: 1,
+			},
+			args: args{"http://abc.test/abc"},
+			want: "1",
+		},
+		{
+			name: "add emtpy url string",
+			fields: fields{
+				Items:     map[string]int{},
+				NextValue: 5,
+			},
+			args: args{""},
+			want: "5",
+		},
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
@@ -47,6 +65,34 @@ func TestDictionary_GetURL(t *testing.T) {
 		args   args
 		want   string
 	}{
+		{
+			name: "simple storage test #1",
+			fields: fields{
+				Items: map[string]int{
+					"http://test1.tst": 1,
+					"http://test2.tst": 2,
+					"http://tst34.tst": 8,
+					"http://tst22.tst": 3,
+				},
+				NextValue: 11,
+			},
+			args: args{"8"},
+			want: "http://tst34.tst",
+		},
+		{
+			name: "empty output test",
+			fields: fields{
+				Items: map[string]int{
+					"http://test1.tst": 1,
+					"http://test2.tst": 2,
+					"http://tst34.tst": 8,
+					"http://tst22.tst": 3,
+				},
+				NextValue: 11,
+			},
+			args: args{""},
+			want: "",
+		},
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
