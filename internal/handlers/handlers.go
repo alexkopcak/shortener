@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -18,20 +17,20 @@ func URLHandler(repo Repositories) http.HandlerFunc {
 		case http.MethodGet:
 			{
 				requestValue := r.URL.Path[len("/"):]
-				fmt.Println(requestValue)
+				//fmt.Println(requestValue)
 				if requestValue == "" || strings.Contains(requestValue, "/") {
 					http.Error(w, "Empty URL", http.StatusBadRequest)
 					return
 				}
 
 				longURLValue := repo.GetURL(requestValue)
-				fmt.Println(longURLValue)
+				//fmt.Println(longURLValue)
 				if longURLValue == "" {
 					http.Error(w, "There are no any short Urls", http.StatusBadRequest)
 					return
 				}
 
-				fmt.Println("GET", requestValue, longURLValue)
+				//fmt.Println("GET", requestValue, longURLValue)
 
 				w.Header().Set("Location", longURLValue)
 				w.WriteHeader(http.StatusTemporaryRedirect) // 307
@@ -54,7 +53,7 @@ func URLHandler(repo Repositories) http.HandlerFunc {
 				requestValue := repo.AddURL(bodyString)
 				shortURLValue := "http://localhost:8080/" + requestValue
 
-				fmt.Println("POST", bodyString, shortURLValue)
+				//fmt.Println("POST", bodyString, shortURLValue)
 
 				w.WriteHeader(http.StatusCreated) // 201
 				var byteArray = []byte(shortURLValue)

@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"bytes"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
@@ -13,9 +12,6 @@ import (
 
 	"github.com/alexkopcak/shortener/internal/storage"
 )
-
-//func (r *repo) AddURL(string) string {}
-//func (r *repo) GetURL(string) string {}
 
 func TestURLHandler(t *testing.T) {
 	type want struct {
@@ -49,13 +45,56 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
-		// TODO: Add test cases.
+		{
+			name:   "get value from repo",
+			target: "http://localhost:8080/0",
+			body:   "",
+			method: http.MethodGet,
+			repo: storage.Dictionary{
+				Items:     map[string]int{"http://abc.test/abc/abd": 0},
+				NextValue: 1,
+			},
+			want: want{
+				statusCode: http.StatusTemporaryRedirect,
+				body:       "",
+				location:   "http://abc.test/abc/abd",
+			},
+		},
+		{
+			name:   "get value from empty repo.",
+			target: "http://loaclhost:8080/0",
+			body:   "",
+			method: http.MethodGet,
+			repo: storage.Dictionary{
+				Items:     map[string]int{},
+				NextValue: 0,
+			},
+			want: want{
+				statusCode: 400,
+				body:       "There are no any short Urls\n",
+				location:   "",
+			},
+		},
+		{
+			name:   "empty url test",
+			target: "http://localhost:8080/",
+			body:   "",
+			method: http.MethodGet,
+			repo: storage.Dictionary{
+				Items:     map[string]int{},
+				NextValue: 0,
+			},
+			want: want{
+				statusCode: 400,
+				body:       "Empty URL\n",
+				location:   "",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.body)))
-			//fmt.Println("!!!", request)
 			w := httptest.NewRecorder()
 			h := http.HandlerFunc(URLHandler(&tt.repo))
 			h.ServeHTTP(w, request)
@@ -63,11 +102,7 @@ func TestURLHandler(t *testing.T) {
 			result := w.Result()
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
-			//assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
-			for _, hdr := range result.Header {
-				fmt.Println("!!!", hdr)
-			}
-			//fmt.Println("!!!", result.Header.Get("Content-Type"))
+			assert.Equal(t, tt.want.location, result.Header.Get("Location"))
 
 			requestResult, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)
@@ -76,9 +111,6 @@ func TestURLHandler(t *testing.T) {
 
 			assert.Equal(t, tt.want.body, string(requestResult))
 
-			// if got := URLHandler(tt.args.repo); !reflect.DeepEqual(got, tt.want) {
-			// 	t.Errorf("URLHandler() = %v, want %v", got, tt.want)
-			// }
 		})
 	}
 }
