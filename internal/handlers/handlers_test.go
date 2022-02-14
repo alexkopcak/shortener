@@ -5,13 +5,46 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/alexkopcak/shortener/internal/storage"
 )
+
+type dictionaryTest struct {
+	Items     map[string]int
+	NextValue int
+}
+
+func (d *dictionaryTest) AddURL(value string) string {
+	if d.Items == nil {
+		d.Items = make(map[string]int)
+	}
+	sURLValue, ok := d.Items[value]
+	if !ok {
+		sURLValue = d.NextValue
+		d.NextValue++
+		d.Items[value] = sURLValue
+	}
+
+	return strconv.Itoa(sURLValue)
+}
+
+func (d *dictionaryTest) GetURL(shortValue string) string {
+	shortURLValueString, err := strconv.Atoi(shortValue)
+
+	if err != nil {
+		return ""
+	}
+
+	for key, value := range d.Items {
+		if value == shortURLValueString {
+			return key
+		}
+	}
+	return ""
+}
 
 func TestURLHandler(t *testing.T) {
 	type want struct {
@@ -26,7 +59,7 @@ func TestURLHandler(t *testing.T) {
 		target string
 		body   string
 		method string
-		repo   storage.Dictionary
+		repo   dictionaryTest
 		want   want
 	}{
 		{
@@ -34,12 +67,12 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "http://abc.test/abc/abd",
 			method: http.MethodPost,
-			repo: storage.Dictionary{
+			repo: dictionaryTest{
 				Items:     map[string]int{},
 				NextValue: 0,
 			},
 			want: want{
-				contentType: "text/plain",
+				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
 				body:        "http://localhost:8080/0",
 				location:    "",
@@ -50,14 +83,15 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/0",
 			body:   "",
 			method: http.MethodGet,
-			repo: storage.Dictionary{
+			repo: dictionaryTest{
 				Items:     map[string]int{"http://abc.test/abc/abd": 0},
 				NextValue: 1,
 			},
 			want: want{
-				statusCode: http.StatusTemporaryRedirect,
-				body:       "",
-				location:   "http://abc.test/abc/abd",
+				contentType: "",
+				statusCode:  http.StatusTemporaryRedirect,
+				body:        "",
+				location:    "http://abc.test/abc/abd",
 			},
 		},
 		{
@@ -65,14 +99,15 @@ func TestURLHandler(t *testing.T) {
 			target: "http://loaclhost:8080/0",
 			body:   "",
 			method: http.MethodGet,
-			repo: storage.Dictionary{
+			repo: dictionaryTest{
 				Items:     map[string]int{},
 				NextValue: 0,
 			},
 			want: want{
-				statusCode: 400,
-				body:       "There are no any short Urls\n",
-				location:   "",
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  400,
+				body:        "There are no any short Urls\n",
+				location:    "",
 			},
 		},
 		{
@@ -80,14 +115,15 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "",
 			method: http.MethodGet,
-			repo: storage.Dictionary{
+			repo: dictionaryTest{
 				Items:     map[string]int{},
 				NextValue: 0,
 			},
 			want: want{
-				statusCode: 400,
-				body:       "Empty URL\n",
-				location:   "",
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  400,
+				body:        "Empty URL\n",
+				location:    "",
 			},
 		},
 	}
@@ -103,6 +139,7 @@ func TestURLHandler(t *testing.T) {
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.location, result.Header.Get("Location"))
+			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
 
 			requestResult, err := ioutil.ReadAll(result.Body)
 			require.NoError(t, err)

@@ -55,6 +55,7 @@ func URLHandler(repo Repositories) http.HandlerFunc {
 
 				//fmt.Println("POST", bodyString, shortURLValue)
 
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 				w.WriteHeader(http.StatusCreated) // 201
 				var byteArray = []byte(shortURLValue)
 				_, err = w.Write(byteArray)
