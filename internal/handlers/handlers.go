@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 type Repositories interface {
@@ -11,62 +13,81 @@ type Repositories interface {
 	GetURL(string) string
 }
 
-func URLHandler(repo Repositories) http.HandlerFunc {
+type Handler struct {
+	*chi.Mux
+	Repo Repositories
+}
+
+func URLHandler(repo Repositories) *Handler {
+	h := &Handler{
+		Mux:  chi.NewMux(),
+		Repo: repo,
+	}
+	h.Mux.Route("/", func(r chi.Router) {
+		r.Get("/", h.GetHandler())
+		r.Get("/{id}", h.GetHandler())
+		r.Post("/", h.PostHandler())
+	})
+	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
+	h.Mux.NotFound(h.NotFound())
+
+	return h
+}
+
+func (h *Handler) MethodNotAllowed() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		switch r.Method {
-		case http.MethodGet:
-			{
-				requestValue := r.URL.Path[len("/"):]
-				//fmt.Println(requestValue)
-				if requestValue == "" || strings.Contains(requestValue, "/") {
-					http.Error(w, "Empty URL", http.StatusBadRequest)
-					return
-				}
+		http.Error(w, "Only GET and POST methods are supported!", http.StatusBadRequest)
+	}
+}
 
-				longURLValue := repo.GetURL(requestValue)
-				//fmt.Println(longURLValue)
-				if longURLValue == "" {
-					http.Error(w, "There are no any short Urls", http.StatusBadRequest)
-					return
-				}
+func (h *Handler) NotFound() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Bad request!", http.StatusBadRequest)
+	}
+}
 
-				//fmt.Println("GET", requestValue, longURLValue)
+func (h *Handler) GetHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		requestValue := r.URL.Path[len("/"):]
+		if requestValue == "" || strings.Contains(requestValue, "/") {
+			http.Error(w, "Empty URL", http.StatusBadRequest)
+			return
+		}
 
-				w.Header().Set("Location", longURLValue)
-				w.WriteHeader(http.StatusTemporaryRedirect) // 307
-				break
-			}
-		case http.MethodPost:
-			{
-				if r.URL.Path != "/" {
-					http.Error(w, "Bad request. POST allow only `/` ", http.StatusBadRequest)
-					return
-				}
+		longURLValue := h.Repo.GetURL(requestValue)
+		if longURLValue == "" {
+			http.Error(w, "There are no any short Urls", http.StatusBadRequest)
+			return
+		}
 
-				bodyRaw, err := io.ReadAll(r.Body)
-				if err != nil || len(bodyRaw) == 0 {
-					http.Error(w, "Body are not contain URL", http.StatusBadRequest)
-					return
-				}
+		w.Header().Set("Location", longURLValue)
+		w.WriteHeader(http.StatusTemporaryRedirect) // 307
+	}
+}
 
-				bodyString := string(bodyRaw)
-				requestValue := repo.AddURL(bodyString)
-				shortURLValue := "http://localhost:8080/" + requestValue
+func (h *Handler) PostHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.Error(w, "Bad request. POST allow only `/` ", http.StatusBadRequest)
+			return
+		}
 
-				//fmt.Println("POST", bodyString, shortURLValue)
+		bodyRaw, err := io.ReadAll(r.Body)
+		if err != nil || len(bodyRaw) == 0 {
+			http.Error(w, "Body are not contain URL", http.StatusBadRequest)
+			return
+		}
 
-				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				w.WriteHeader(http.StatusCreated) // 201
-				var byteArray = []byte(shortURLValue)
-				_, err = w.Write(byteArray)
-				if err != nil {
-					http.Error(w, "Something went wrong", http.StatusBadRequest)
-					return
-				}
-				break
-			}
-		default:
-			http.Error(w, "Only GET and POST methods are supported!", http.StatusBadRequest)
+		bodyString := string(bodyRaw)
+		requestValue := h.Repo.AddURL(bodyString)
+		shortURLValue := "http://localhost:8080/" + requestValue
+
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusCreated) // 201
+		var byteArray = []byte(shortURLValue)
+		_, err = w.Write(byteArray)
+		if err != nil {
+			http.Error(w, "Something went wrong", http.StatusBadRequest)
 			return
 		}
 	}

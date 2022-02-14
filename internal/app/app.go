@@ -17,9 +17,9 @@ func Run() {
 
 	//HTTP Server
 	server := &http.Server{
-		Addr: "localhost:8080",
+		Addr:    "localhost:8080",
+		Handler: hand.URLHandler(&dictionary),
 	}
-	http.HandleFunc("/", hand.URLHandler(&dictionary))
 
 	// start server
 	writer := os.Stdout
