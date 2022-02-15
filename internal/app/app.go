@@ -1,9 +1,8 @@
 package app
 
 import (
-	"fmt"
+	"log"
 	"net/http"
-	"os"
 
 	hand "github.com/alexkopcak/shortener/internal/handlers"
 	storage "github.com/alexkopcak/shortener/internal/storage"
@@ -12,8 +11,7 @@ import (
 func Run() {
 	// Repository
 	var dictionary storage.Dictionary
-	dictionary.Items = make(map[string]int)
-	dictionary.NextValue = 0
+	dictionary.Items = make(map[string]string)
 
 	//HTTP Server
 	server := &http.Server{
@@ -22,10 +20,5 @@ func Run() {
 	}
 
 	// start server
-	writer := os.Stdout
-	_, err := fmt.Fprintln(writer, server.ListenAndServe())
-	if err != nil {
-		fmt.Println(err.Error())
-	}
-
+	log.Fatal(server.ListenAndServe())
 }

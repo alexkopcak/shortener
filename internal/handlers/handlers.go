@@ -5,23 +5,23 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
-type Repositories interface {
-	AddURL(string) string
-	GetURL(string) string
-}
+const (
+	serverAddr = "http://localhost:8080/"
+)
 
 type Handler struct {
 	*chi.Mux
-	Repo Repositories
+	Repo storage.Dictionary
 }
 
-func URLHandler(repo Repositories) *Handler {
+func URLHandler(repo *storage.Dictionary) *Handler {
 	h := &Handler{
 		Mux:  chi.NewMux(),
-		Repo: repo,
+		Repo: *repo,
 	}
 	h.Mux.Route("/", func(r chi.Router) {
 		r.Get("/", h.GetHandler())
@@ -80,12 +80,10 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 
 		bodyString := string(bodyRaw)
 		requestValue := h.Repo.AddURL(bodyString)
-		shortURLValue := "http://localhost:8080/" + requestValue
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated) // 201
-		var byteArray = []byte(shortURLValue)
-		_, err = w.Write(byteArray)
+		_, err = w.Write([]byte(serverAddr + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong", http.StatusBadRequest)
 			return

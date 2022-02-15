@@ -2,49 +2,16 @@ package handlers
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
-	"strconv"
 	"testing"
 
+	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-type testDictionary struct {
-	Items     map[string]int
-	NextValue int
-}
-
-func (d *testDictionary) AddURL(value string) string {
-	if d.Items == nil {
-		d.Items = make(map[string]int)
-	}
-	sURLValue, ok := d.Items[value]
-	if !ok {
-		sURLValue = d.NextValue
-		d.NextValue++
-		d.Items[value] = sURLValue
-	}
-
-	return strconv.Itoa(sURLValue)
-}
-
-func (d *testDictionary) GetURL(shortValue string) string {
-	shortURLValueString, err := strconv.Atoi(shortValue)
-
-	if err != nil {
-		return ""
-	}
-
-	for key, value := range d.Items {
-		if value == shortURLValueString {
-			return key
-		}
-	}
-	return ""
-}
 
 func TestURLHandler(t *testing.T) {
 	type want struct {
@@ -59,7 +26,7 @@ func TestURLHandler(t *testing.T) {
 		target string
 		body   string
 		method string
-		repo   testDictionary
+		repo   storage.Dictionary
 		want   want
 	}{
 		{
@@ -67,9 +34,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "http://abc.test/abc/abd",
 			method: http.MethodPost,
-			repo: testDictionary{
-				Items:     map[string]int{},
-				NextValue: 0,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -83,9 +49,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "http://abc2.test/",
 			method: http.MethodPost,
-			repo: testDictionary{
-				Items:     map[string]int{"http://abc.test/abc/abd": 0},
-				NextValue: 1,
+			repo: storage.Dictionary{
+				Items: map[string]string{"0": "http://abc.test/abc/abd"},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -99,9 +64,10 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/0",
 			body:   "",
 			method: http.MethodGet,
-			repo: testDictionary{
-				Items:     map[string]int{"http://abc.test/abc/abd": 0},
-				NextValue: 1,
+			repo: storage.Dictionary{
+				Items: map[string]string{
+					"0": "http://abc.test/abc/abd",
+				},
 			},
 			want: want{
 				contentType: "",
@@ -115,9 +81,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://loaclhost:8080/0",
 			body:   "",
 			method: http.MethodGet,
-			repo: testDictionary{
-				Items:     map[string]int{},
-				NextValue: 0,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -131,9 +96,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "",
 			method: http.MethodGet,
-			repo: testDictionary{
-				Items:     map[string]int{},
-				NextValue: 0,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -147,9 +111,10 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/",
 			body:   "",
 			method: http.MethodConnect,
-			repo: testDictionary{
-				Items:     map[string]int{"http://abc.test/abc/abd": 0},
-				NextValue: 1,
+			repo: storage.Dictionary{
+				Items: map[string]string{
+					"0": "http://abc.test/abc/abd",
+				},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -163,9 +128,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080/0",
 			body:   "",
 			method: "abracadabra",
-			repo: testDictionary{
-				Items:     map[string]int{"http://abc.test/abc/abd": 0},
-				NextValue: 1,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -179,9 +143,8 @@ func TestURLHandler(t *testing.T) {
 			target: "http://localhost:8080//",
 			body:   "",
 			method: http.MethodGet,
-			repo: testDictionary{
-				Items:     map[string]int{"http://abc.test/abc/abd": 0},
-				NextValue: 1,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
@@ -211,8 +174,17 @@ func TestURLHandler(t *testing.T) {
 			err = result.Body.Close()
 			require.NoError(t, err)
 
-			assert.Equal(t, tt.want.body, string(requestResult))
-
+			if tt.method == http.MethodPost && result.StatusCode == http.StatusCreated {
+				fmt.Println(string(requestResult))
+				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
+				w2 := httptest.NewRecorder()
+				h2 := http.Server{
+					Handler: URLHandler(&tt.repo),
+				}
+				h2.Handler.ServeHTTP(w2, request2)
+				result2 := w2.Result()
+				assert.Equal(t, tt.body, result2.Header.Get("Location"))
+			}
 		})
 	}
 }

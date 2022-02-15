@@ -1,51 +1,92 @@
 package storage
 
 import (
+	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDictionary_AddURL(t *testing.T) {
 	type fields struct {
-		Items     map[string]int
-		NextValue int
+		MinShortURLLength int
+		Items             map[string]string
 	}
 	type args struct {
-		value string
+		longURLValue []string
 	}
 	tests := []struct {
 		name   string
 		fields fields
 		args   args
-		want   string
 	}{
 		{
-			name: "simple storage test #1",
+			name: "add value",
 			fields: fields{
-				Items:     map[string]int{},
-				NextValue: 1,
+				MinShortURLLength: 5,
+				Items:             map[string]string{},
 			},
-			args: args{"http://abc.test/abc"},
-			want: "1",
+			args: args{
+				longURLValue: []string{"http://abc.test/abc"},
+			},
 		},
 		{
-			name: "add emtpy url string",
+			name: "add the same value twise #1",
 			fields: fields{
-				Items:     map[string]int{},
-				NextValue: 5,
+				MinShortURLLength: 5,
+				Items: map[string]string{
+					"0a1b2": "http://abc.test/abc",
+				},
 			},
-			args: args{""},
-			want: "5",
+			args: args{
+				longURLValue: []string{"http://abc.test/abc"},
+			},
 		},
-		// TODO: Add test cases.
+		{
+			name: "add the same value twise #2",
+			fields: fields{
+				MinShortURLLength: 5,
+				Items: map[string]string{
+					"0a1b2": "http://abc.test/abc",
+				},
+			},
+			args: args{
+				longURLValue: []string{
+					"http://abc.test/abc",
+					"http://abc.test/abc",
+				},
+			},
+		},
+		{
+			name: "add empty value",
+			fields: fields{
+				MinShortURLLength: 5,
+				Items:             map[string]string{},
+			},
+			args: args{
+				longURLValue: []string{""},
+			},
+		},
+		{
+			name: "add space value",
+			fields: fields{
+				MinShortURLLength: 5,
+				Items:             map[string]string{},
+			},
+			args: args{
+				longURLValue: []string{" "},
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dic := &Dictionary{
-				Items:     tt.fields.Items,
-				NextValue: tt.fields.NextValue,
+			d := &Dictionary{
+				MinShortURLLength: tt.fields.MinShortURLLength,
+				Items:             tt.fields.Items,
 			}
-			if got := dic.AddURL(tt.args.value); got != tt.want {
-				t.Errorf("Dictionary.AddURL() = %v, want %v", got, tt.want)
+			for _, item := range tt.args.longURLValue {
+				got := d.AddURL(item)
+				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
 			}
 		})
 	}
@@ -53,11 +94,11 @@ func TestDictionary_AddURL(t *testing.T) {
 
 func TestDictionary_GetURL(t *testing.T) {
 	type fields struct {
-		Items     map[string]int
-		NextValue int
+		MinShortURLLength int
+		Items             map[string]string
 	}
 	type args struct {
-		shortValue string
+		shortURLValue string
 	}
 	tests := []struct {
 		name   string
@@ -66,42 +107,17 @@ func TestDictionary_GetURL(t *testing.T) {
 		want   string
 	}{
 		{
-			name: "simple storage test #1",
-			fields: fields{
-				Items: map[string]int{
-					"http://test1.tst": 1,
-					"http://test2.tst": 2,
-					"http://tst34.tst": 8,
-					"http://tst22.tst": 3,
-				},
-				NextValue: 11,
-			},
-			args: args{"8"},
-			want: "http://tst34.tst",
+			name:   "get value",
+			fields: fields{},
 		},
-		{
-			name: "empty output test",
-			fields: fields{
-				Items: map[string]int{
-					"http://test1.tst": 1,
-					"http://test2.tst": 2,
-					"http://tst34.tst": 8,
-					"http://tst22.tst": 3,
-				},
-				NextValue: 11,
-			},
-			args: args{""},
-			want: "",
-		},
-		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dic := &Dictionary{
-				Items:     tt.fields.Items,
-				NextValue: tt.fields.NextValue,
+			d := &Dictionary{
+				MinShortURLLength: tt.fields.MinShortURLLength,
+				Items:             tt.fields.Items,
 			}
-			if got := dic.GetURL(tt.args.shortValue); got != tt.want {
+			if got := d.GetURL(tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})
