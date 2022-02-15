@@ -184,6 +184,8 @@ func TestURLHandler(t *testing.T) {
 				h2.Handler.ServeHTTP(w2, request2)
 				result2 := w2.Result()
 				assert.Equal(t, tt.body, result2.Header.Get("Location"))
+				err = result.Body.Close()
+				require.NoError(t, err)
 			}
 		})
 	}
