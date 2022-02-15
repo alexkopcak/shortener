@@ -29,7 +29,7 @@ func URLHandler(repo *storage.Dictionary) *Handler {
 	}
 
 	h.Mux.Route("/{idValue}", func(r chi.Router) {
-		r.Use(h.IdContext)
+		r.Use(h.IDContext)
 		r.Get("/", h.GetHandler())
 	})
 	h.Mux.Post("/", h.PostHandler())
@@ -51,7 +51,7 @@ func (h *Handler) NotFound() http.HandlerFunc {
 	}
 }
 
-func (h *Handler) IdContext(next http.Handler) http.Handler {
+func (h *Handler) IDContext(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		idValue := chi.URLParam(r, "idValue")
 		if idValue == "" ||
