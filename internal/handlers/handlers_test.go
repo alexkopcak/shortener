@@ -176,6 +176,7 @@ func TestURLHandler(t *testing.T) {
 
 			if tt.method == http.MethodPost && result.StatusCode == http.StatusCreated {
 				fmt.Println(string(requestResult))
+
 				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
 				w2 := httptest.NewRecorder()
 				h2 := http.Server{
@@ -184,7 +185,7 @@ func TestURLHandler(t *testing.T) {
 				h2.Handler.ServeHTTP(w2, request2)
 				result2 := w2.Result()
 				assert.Equal(t, tt.body, result2.Header.Get("Location"))
-				err = result.Body.Close()
+				err = result2.Body.Close()
 				require.NoError(t, err)
 			}
 		})
