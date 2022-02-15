@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"strings"
@@ -9,8 +10,11 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type key int
+
 const (
-	serverAddr = "http://localhost:8080/"
+	serverAddr         = "http://localhost:8080/"
+	keyPrincipalID key = iota
 )
 
 type Handler struct {
@@ -23,11 +27,12 @@ func URLHandler(repo *storage.Dictionary) *Handler {
 		Mux:  chi.NewMux(),
 		Repo: *repo,
 	}
-	h.Mux.Route("/", func(r chi.Router) {
+
+	h.Mux.Route("/{idValue}", func(r chi.Router) {
+		r.Use(h.IdContext)
 		r.Get("/", h.GetHandler())
-		r.Get("/{id}", h.GetHandler())
-		r.Post("/", h.PostHandler())
 	})
+	h.Mux.Post("/", h.PostHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
@@ -46,32 +51,40 @@ func (h *Handler) NotFound() http.HandlerFunc {
 	}
 }
 
-func (h *Handler) GetHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		requestValue := r.URL.Path[len("/"):]
-		if requestValue == "" || strings.Contains(requestValue, "/") {
-			http.Error(w, "Empty URL", http.StatusBadRequest)
+func (h *Handler) IdContext(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		idValue := chi.URLParam(r, "idValue")
+		if idValue == "" ||
+			strings.TrimSpace(idValue) == "" {
+			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-
-		longURLValue := h.Repo.GetURL(requestValue)
+		longURLValue := h.Repo.GetURL(idValue)
 		if longURLValue == "" {
 			http.Error(w, "There are no any short Urls", http.StatusBadRequest)
 			return
 		}
 
+		ctx := context.WithValue(r.Context(), keyPrincipalID, longURLValue)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (h *Handler) GetHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		longURLValue, ok := ctx.Value(keyPrincipalID).(string)
+		if !ok {
+			http.Error(w, "Something went wrong", http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Location", longURLValue)
-		w.WriteHeader(http.StatusTemporaryRedirect) // 307
+		w.WriteHeader(http.StatusTemporaryRedirect)
 	}
 }
 
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/" {
-			http.Error(w, "Bad request. POST allow only `/` ", http.StatusBadRequest)
-			return
-		}
-
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
 			http.Error(w, "Body are not contain URL", http.StatusBadRequest)
@@ -82,7 +95,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		requestValue := h.Repo.AddURL(bodyString)
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusCreated) // 201
+		w.WriteHeader(http.StatusCreated)
 		_, err = w.Write([]byte(serverAddr + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong", http.StatusBadRequest)

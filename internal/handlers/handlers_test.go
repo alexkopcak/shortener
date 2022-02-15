@@ -140,7 +140,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:   "bad URL",
-			target: "http://localhost:8080//",
+			target: "http://localhost:8080/0/",
 			body:   "",
 			method: http.MethodGet,
 			repo: storage.Dictionary{
