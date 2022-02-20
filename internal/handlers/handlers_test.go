@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/alexkopcak/shortener/internal/storage"
@@ -22,18 +24,20 @@ func TestURLHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		target string
-		body   string
-		method string
-		repo   storage.Dictionary
-		want   want
+		name     string
+		target   string
+		template string
+		body     string
+		method   string
+		repo     storage.Dictionary
+		want     want
 	}{
 		{
-			name:   "post value and empty repo",
-			target: "http://localhost:8080/",
-			body:   "http://abc.test/abc/abd",
-			method: http.MethodPost,
+			name:     "post value and empty repo",
+			target:   "http://localhost:8080/",
+			template: "%s",
+			body:     "http://abc.test/abc/abd",
+			method:   http.MethodPost,
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -45,10 +49,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "post value and repo",
-			target: "http://localhost:8080/",
-			body:   "http://abc2.test/",
-			method: http.MethodPost,
+			name:     "post value and repo",
+			target:   "http://localhost:8080/",
+			template: "%s",
+			body:     "http://abc2.test/",
+			method:   http.MethodPost,
 			repo: storage.Dictionary{
 				Items: map[string]string{"0": "http://abc.test/abc/abd"},
 			},
@@ -60,10 +65,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "get value from repo",
-			target: "http://localhost:8080/0",
-			body:   "",
-			method: http.MethodGet,
+			name:     "get value from repo",
+			target:   "http://localhost:8080/0",
+			template: "%s",
+			body:     "",
+			method:   http.MethodGet,
 			repo: storage.Dictionary{
 				Items: map[string]string{
 					"0": "http://abc.test/abc/abd",
@@ -77,10 +83,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "get value from empty repo",
-			target: "http://loaclhost:8080/0",
-			body:   "",
-			method: http.MethodGet,
+			name:     "get value from empty repo",
+			target:   "http://loaclhost:8080/0",
+			template: "%s",
+			body:     "",
+			method:   http.MethodGet,
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -92,10 +99,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "get with empty url",
-			target: "http://localhost:8080/",
-			body:   "",
-			method: http.MethodGet,
+			name:     "get with empty url",
+			target:   "http://localhost:8080/",
+			template: "%s",
+			body:     "",
+			method:   http.MethodGet,
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -107,10 +115,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "method not allowed",
-			target: "http://localhost:8080/",
-			body:   "",
-			method: http.MethodConnect,
+			name:     "method not allowed",
+			target:   "http://localhost:8080/",
+			template: "%s",
+			body:     "",
+			method:   http.MethodConnect,
 			repo: storage.Dictionary{
 				Items: map[string]string{
 					"0": "http://abc.test/abc/abd",
@@ -124,10 +133,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "method not allowed #2",
-			target: "http://localhost:8080/0",
-			body:   "",
-			method: "abracadabra",
+			name:     "method not allowed #2",
+			target:   "http://localhost:8080/0",
+			template: "%s",
+			body:     "",
+			method:   "abracadabra",
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -139,10 +149,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad URL",
-			target: "http://localhost:8080/0/",
-			body:   "",
-			method: http.MethodGet,
+			name:     "bad URL",
+			target:   "http://localhost:8080/0/",
+			template: "%s",
+			body:     "",
+			method:   http.MethodGet,
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -154,10 +165,11 @@ func TestURLHandler(t *testing.T) {
 			},
 		},
 		{
-			name:   "bad URL #2",
-			target: "http://localhost:8080//",
-			body:   "",
-			method: http.MethodGet,
+			name:     "bad URL #2",
+			target:   "http://localhost:8080//",
+			template: "%s",
+			body:     "",
+			method:   http.MethodGet,
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
@@ -168,11 +180,107 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
+		{
+			name:     "body are not contains URL value",
+			target:   "http://localhost:8080/",
+			template: "%s",
+			body:     "123",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Body are not contains URL value!\n",
+				location:    "",
+			},
+		},
+		{
+			name:     "body are not contains URL value #2",
+			target:   "http://localhost:8080/api/shorten",
+			template: "{\"url\": \"%s\"}",
+			body:     "123",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Body are not contains URL value!\n",
+				location:    "",
+			},
+		},
+		{
+			name:     "bad json",
+			target:   "http://localhost:8080/api/shorten",
+			template: "%s",
+			body:     "123",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Bad request!\n",
+				location:    "",
+			},
+		},
+		{
+			name:     "bad json #2",
+			target:   "http://localhost:8080/api/shorten",
+			template: "{\"url\": %s}",
+			body:     "http://abc/test",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Bad request!\n",
+				location:    "",
+			},
+		},
+		{
+			name:     "bad json #3",
+			target:   "http://localhost:8080/api/shorten",
+			template: "{\"url\": \"%s}",
+			body:     "http://abc/test",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Bad request!\n",
+				location:    "",
+			},
+		},
+		{
+			name:     "api post value and empty repo",
+			target:   "http://localhost:8080/api/shorten",
+			template: "{\"url\": \"%s\"}",
+			body:     "http://abc/test",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "application/json",
+				statusCode:  http.StatusCreated,
+				body:        "",
+				location:    "",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.body)))
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			w := httptest.NewRecorder()
 			h := http.Server{
 				Handler: URLHandler(&tt.repo),
@@ -189,8 +297,19 @@ func TestURLHandler(t *testing.T) {
 			err = result.Body.Close()
 			require.NoError(t, err)
 
+			if tt.method == http.MethodGet && result.StatusCode == http.StatusTemporaryRedirect {
+				assert.Equal(t, tt.want.body, string(requestResult))
+			}
+
 			if tt.method == http.MethodPost && result.StatusCode == http.StatusCreated {
-				fmt.Println(string(requestResult))
+				if strings.Contains(request.RequestURI, "/api/shorten") {
+					aliasRequest := &struct {
+						LongURLValue string `json:"result,omitempty"`
+					}{}
+					err := json.Unmarshal(requestResult, aliasRequest)
+					require.NoError(t, err)
+					requestResult = []byte(aliasRequest.LongURLValue)
+				}
 
 				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
 				w2 := httptest.NewRecorder()

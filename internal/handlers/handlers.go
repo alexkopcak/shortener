@@ -2,11 +2,11 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 
 	"github.com/alexkopcak/shortener/internal/storage"
+	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -49,14 +49,13 @@ func (h *Handler) NotFound() http.HandlerFunc {
 func (h *Handler) GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idValue := chi.URLParam(r, "idValue")
-		fmt.Println("***", idValue)
 		if idValue == "" {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
 		longURLValue := h.Repo.GetURL(idValue)
 		if longURLValue == "" {
-			http.Error(w, "There are no any short Urls", http.StatusBadRequest)
+			http.Error(w, "There are no any short Urls!", http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Location", longURLValue)
@@ -68,11 +67,11 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
-			http.Error(w, "Body are not contain URL", http.StatusBadRequest)
+			http.Error(w, "Body are not contain URL!", http.StatusBadRequest)
 			return
 		}
 		aliasRequest := &struct {
-			LongURLValue string `json:"url,omitempty"`
+			LongURLValue string `json:"url,omitempty" valid:"url"`
 		}{}
 
 		if err := json.Unmarshal(bodyRaw, aliasRequest); err != nil {
@@ -80,7 +79,11 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		// прикрутить проверку
+		_, err = govalidator.ValidateStruct(aliasRequest)
+		if err != nil {
+			http.Error(w, "Body are not contains URL value!", http.StatusBadRequest)
+			return
+		}
 
 		requestValue := h.Repo.AddURL(aliasRequest.LongURLValue)
 		w.Header().Set("Content-Type", "application/json")
@@ -93,12 +96,12 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		}
 		responseValueRaw, err := json.Marshal(responseValue)
 		if err != nil {
-			http.Error(w, "JSON marshaling error", http.StatusBadRequest)
+			http.Error(w, "JSON marshaling error!", http.StatusBadRequest)
 			return
 		}
 		_, err = w.Write(responseValueRaw)
 		if err != nil {
-			http.Error(w, "Something went wrong", http.StatusBadRequest)
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}
 	}
@@ -108,18 +111,28 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
-			http.Error(w, "Body are not contain URL", http.StatusBadRequest)
+			http.Error(w, "Body are not contain URL!", http.StatusBadRequest)
 			return
 		}
 
-		bodyString := string(bodyRaw)
-		requestValue := h.Repo.AddURL(bodyString)
+		aliasRequest := &struct {
+			LongURLValue string `valid:"url"`
+		}{
+			LongURLValue: string(bodyRaw),
+		}
+		_, err = govalidator.ValidateStruct(aliasRequest)
+		if err != nil {
+			http.Error(w, "Body are not contains URL value!", http.StatusBadRequest)
+			return
+		}
+
+		requestValue := h.Repo.AddURL(aliasRequest.LongURLValue)
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
 		_, err = w.Write([]byte(serverAddr + requestValue))
 		if err != nil {
-			http.Error(w, "Something went wrong", http.StatusBadRequest)
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}
 	}
