@@ -22,12 +22,11 @@ func Run() {
 	// Get Env variables
 	serverAddr, exsist := os.LookupEnv(serverEnvVariable)
 	if !exsist {
-		log.Fatal("Unknown SERVER_ADDRESS variable!")
-		return
+		serverAddr = "localhost:8080"
 	}
 	baseURL, exsist := os.LookupEnv(baseURLEnvVariable)
 	if !exsist {
-		log.Fatal("Unknown BASE_URL variable!")
+		baseURL = "http://localhost:8080"
 	}
 
 	//HTTP Server

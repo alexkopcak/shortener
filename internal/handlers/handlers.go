@@ -90,7 +90,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		responseValue := struct {
 			ResultValue string `json:"result"`
 		}{
-			ResultValue: h.BaseURL + requestValue,
+			ResultValue: h.BaseURL + "/" + requestValue,
 		}
 		responseValueRaw, err := json.Marshal(responseValue)
 		if err != nil {
@@ -128,7 +128,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
-		_, err = w.Write([]byte(h.BaseURL + requestValue))
+		_, err = w.Write([]byte(h.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return

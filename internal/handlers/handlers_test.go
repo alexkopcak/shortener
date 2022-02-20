@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	baseURL = "http://localhost:8080/"
+	baseURL = "http://localhost:8080"
 )
 
 func TestURLHandler(t *testing.T) {
@@ -65,13 +65,13 @@ func TestURLHandler(t *testing.T) {
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
-				body:        baseURL + "1",
+				body:        baseURL + "/1",
 				location:    "",
 			},
 		},
 		{
 			name:     "get value from repo",
-			target:   baseURL + "0",
+			target:   baseURL + "/0",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -89,7 +89,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "get value from empty repo",
-			target:   baseURL + "0",
+			target:   baseURL + "/0",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -139,7 +139,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "method not allowed #2",
-			target:   baseURL + "0",
+			target:   baseURL + "/0",
 			template: "%s",
 			body:     "",
 			method:   "abracadabra",
@@ -155,7 +155,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad URL",
-			target:   baseURL + "0/",
+			target:   baseURL + "/0/",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -171,7 +171,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad URL #2",
-			target:   baseURL + "/",
+			target:   baseURL + "//",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -203,7 +203,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "body are not contains URL value #2",
-			target:   baseURL + "api/shorten",
+			target:   baseURL + "/api/shorten",
 			template: "{\"url\": \"%s\"}",
 			body:     "123",
 			method:   http.MethodPost,
@@ -219,7 +219,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json",
-			target:   baseURL + "api/shorten",
+			target:   baseURL + "/api/shorten",
 			template: "%s",
 			body:     "123",
 			method:   http.MethodPost,
@@ -235,7 +235,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json #2",
-			target:   baseURL + "api/shorten",
+			target:   baseURL + "/api/shorten",
 			template: "{\"url\": %s}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
@@ -251,7 +251,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json #3",
-			target:   baseURL + "api/shorten",
+			target:   baseURL + "/api/shorten",
 			template: "{\"url\": \"%s}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
@@ -267,7 +267,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "api post value and empty repo",
-			target:   baseURL + "api/shorten",
+			target:   baseURL + "/api/shorten",
 			template: "{\"url\": \"%s\"}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
