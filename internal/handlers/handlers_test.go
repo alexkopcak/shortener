@@ -15,7 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	baseURL = "http://localhost:8080/"
+)
+
 func TestURLHandler(t *testing.T) {
+
 	type want struct {
 		contentType string
 		statusCode  int
@@ -34,7 +39,7 @@ func TestURLHandler(t *testing.T) {
 	}{
 		{
 			name:     "post value and empty repo",
-			target:   "http://localhost:8080/",
+			target:   baseURL,
 			template: "%s",
 			body:     "http://abc.test/abc/abd",
 			method:   http.MethodPost,
@@ -44,13 +49,13 @@ func TestURLHandler(t *testing.T) {
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
-				body:        "http://localhost:8080/0",
+				body:        baseURL + "0",
 				location:    "",
 			},
 		},
 		{
 			name:     "post value and repo",
-			target:   "http://localhost:8080/",
+			target:   baseURL,
 			template: "%s",
 			body:     "http://abc2.test/",
 			method:   http.MethodPost,
@@ -60,13 +65,13 @@ func TestURLHandler(t *testing.T) {
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
-				body:        "http://localhost:8080/1",
+				body:        baseURL + "1",
 				location:    "",
 			},
 		},
 		{
 			name:     "get value from repo",
-			target:   "http://localhost:8080/0",
+			target:   baseURL + "0",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -84,7 +89,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "get value from empty repo",
-			target:   "http://loaclhost:8080/0",
+			target:   baseURL + "0",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -100,7 +105,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "get with empty url",
-			target:   "http://localhost:8080/",
+			target:   baseURL,
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -116,7 +121,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "method not allowed",
-			target:   "http://localhost:8080/",
+			target:   baseURL,
 			template: "%s",
 			body:     "",
 			method:   http.MethodConnect,
@@ -134,7 +139,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "method not allowed #2",
-			target:   "http://localhost:8080/0",
+			target:   baseURL + "0",
 			template: "%s",
 			body:     "",
 			method:   "abracadabra",
@@ -150,7 +155,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad URL",
-			target:   "http://localhost:8080/0/",
+			target:   baseURL + "0/",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -166,7 +171,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad URL #2",
-			target:   "http://localhost:8080//",
+			target:   baseURL + "/",
 			template: "%s",
 			body:     "",
 			method:   http.MethodGet,
@@ -182,7 +187,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "body are not contains URL value",
-			target:   "http://localhost:8080/",
+			target:   baseURL,
 			template: "%s",
 			body:     "123",
 			method:   http.MethodPost,
@@ -198,7 +203,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "body are not contains URL value #2",
-			target:   "http://localhost:8080/api/shorten",
+			target:   baseURL + "api/shorten",
 			template: "{\"url\": \"%s\"}",
 			body:     "123",
 			method:   http.MethodPost,
@@ -214,7 +219,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json",
-			target:   "http://localhost:8080/api/shorten",
+			target:   baseURL + "api/shorten",
 			template: "%s",
 			body:     "123",
 			method:   http.MethodPost,
@@ -230,7 +235,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json #2",
-			target:   "http://localhost:8080/api/shorten",
+			target:   baseURL + "api/shorten",
 			template: "{\"url\": %s}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
@@ -246,7 +251,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "bad json #3",
-			target:   "http://localhost:8080/api/shorten",
+			target:   baseURL + "api/shorten",
 			template: "{\"url\": \"%s}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
@@ -262,7 +267,7 @@ func TestURLHandler(t *testing.T) {
 		},
 		{
 			name:     "api post value and empty repo",
-			target:   "http://localhost:8080/api/shorten",
+			target:   baseURL + "api/shorten",
 			template: "{\"url\": \"%s\"}",
 			body:     "http://abc/test",
 			method:   http.MethodPost,
@@ -283,7 +288,7 @@ func TestURLHandler(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			w := httptest.NewRecorder()
 			h := http.Server{
-				Handler: URLHandler(&tt.repo),
+				Handler: URLHandler(&tt.repo, baseURL),
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
@@ -314,7 +319,7 @@ func TestURLHandler(t *testing.T) {
 				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
 				w2 := httptest.NewRecorder()
 				h2 := http.Server{
-					Handler: URLHandler(&tt.repo),
+					Handler: URLHandler(&tt.repo, baseURL),
 				}
 				h2.Handler.ServeHTTP(w2, request2)
 				result2 := w2.Result()

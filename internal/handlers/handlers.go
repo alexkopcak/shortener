@@ -10,19 +10,17 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const (
-	serverAddr = "http://localhost:8080/"
-)
-
 type Handler struct {
 	*chi.Mux
-	Repo storage.Dictionary
+	Repo    storage.Dictionary
+	BaseURL string
 }
 
-func URLHandler(repo *storage.Dictionary) *Handler {
+func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h := &Handler{
-		Mux:  chi.NewMux(),
-		Repo: *repo,
+		Mux:     chi.NewMux(),
+		Repo:    *repo,
+		BaseURL: baseURL,
 	}
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
@@ -92,7 +90,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		responseValue := struct {
 			ResultValue string `json:"result"`
 		}{
-			ResultValue: serverAddr + requestValue,
+			ResultValue: h.BaseURL + requestValue,
 		}
 		responseValueRaw, err := json.Marshal(responseValue)
 		if err != nil {
@@ -130,7 +128,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
-		_, err = w.Write([]byte(serverAddr + requestValue))
+		_, err = w.Write([]byte(h.BaseURL + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
