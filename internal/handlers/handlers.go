@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -26,6 +27,7 @@ func URLHandler(repo *storage.Dictionary) *Handler {
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Post("/", h.PostHandler())
+	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
@@ -59,6 +61,46 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 		}
 		w.Header().Set("Location", longURLValue)
 		w.WriteHeader(http.StatusTemporaryRedirect)
+	}
+}
+
+func (h *Handler) PostAPIHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		bodyRaw, err := io.ReadAll(r.Body)
+		if err != nil || len(bodyRaw) == 0 {
+			http.Error(w, "Body are not contain URL", http.StatusBadRequest)
+			return
+		}
+		aliasRequest := &struct {
+			LongURLValue string `json:"url,omitempty"`
+		}{}
+
+		if err := json.Unmarshal(bodyRaw, aliasRequest); err != nil {
+			http.Error(w, "Bad request!", http.StatusBadRequest)
+			return
+		}
+
+		// прикрутить проверку
+
+		requestValue := h.Repo.AddURL(aliasRequest.LongURLValue)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+
+		responseValue := struct {
+			ResultValue string `json:"result"`
+		}{
+			ResultValue: serverAddr + requestValue,
+		}
+		responseValueRaw, err := json.Marshal(responseValue)
+		if err != nil {
+			http.Error(w, "JSON marshaling error", http.StatusBadRequest)
+			return
+		}
+		_, err = w.Write(responseValueRaw)
+		if err != nil {
+			http.Error(w, "Something went wrong", http.StatusBadRequest)
+			return
+		}
 	}
 }
 

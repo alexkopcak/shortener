@@ -153,6 +153,21 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
+		{
+			name:   "bad URL #2",
+			target: "http://localhost:8080//",
+			body:   "",
+			method: http.MethodGet,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Bad request!\n",
+				location:    "",
+			},
+		},
 	}
 
 	for _, tt := range tests {
