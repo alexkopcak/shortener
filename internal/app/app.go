@@ -3,36 +3,33 @@ package app
 import (
 	"log"
 	"net/http"
-	"os"
 
-	hand "github.com/alexkopcak/shortener/internal/handlers"
-	storage "github.com/alexkopcak/shortener/internal/storage"
+	"github.com/alexkopcak/shortener/internal/handlers"
+	"github.com/alexkopcak/shortener/internal/storage"
+	"github.com/caarlos0/env"
 )
 
-const (
-	serverEnvVariable  = "SERVER_ADDRESS"
-	baseURLEnvVariable = "BASE_URL"
-)
+type config struct {
+	ServerAddr      string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
+	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+}
 
 func Run() {
-	// Repository
-	var dictionary storage.Dictionary
-	dictionary.Items = make(map[string]string)
+	// Env configuration
+	var cfg config
+	err := env.Parse(&cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	// Get Env variables
-	serverAddr, exsist := os.LookupEnv(serverEnvVariable)
-	if !exsist {
-		serverAddr = "localhost:8080"
-	}
-	baseURL, exsist := os.LookupEnv(baseURLEnvVariable)
-	if !exsist {
-		baseURL = "http://localhost:8080"
-	}
+	// Repository
+	dictionary := storage.NewDictionary(cfg.FileStoragePath)
 
 	//HTTP Server
 	server := &http.Server{
-		Addr:    serverAddr,
-		Handler: hand.URLHandler(&dictionary, baseURL),
+		Addr:    cfg.ServerAddr,
+		Handler: handlers.URLHandler(dictionary, cfg.BaseURL),
 	}
 
 	// start server
