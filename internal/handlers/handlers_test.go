@@ -287,11 +287,15 @@ func TestURLHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			w := httptest.NewRecorder()
+			d := storage.NewDictionary("")
+			d.Items = tt.repo.Items
 			h := http.Server{
-				Handler: URLHandler(&tt.repo, baseURL),
+				Handler: URLHandler(d, baseURL),
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
+
+			fmt.Println(&tt.repo)
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.location, result.Header.Get("Location"))

@@ -80,10 +80,9 @@ func TestDictionary_AddURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := &Dictionary{
-				MinShortURLLength: tt.fields.MinShortURLLength,
-				Items:             tt.fields.Items,
-			}
+			d := NewDictionary("")
+			d.Items = tt.fields.Items
+
 			for _, item := range tt.args.longURLValue {
 				got := d.AddURL(item)
 				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
