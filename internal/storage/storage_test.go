@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestDictionary_AddURL(t *testing.T) {
@@ -80,11 +81,14 @@ func TestDictionary_AddURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d := NewDictionary("")
+			d, err := NewDictionary("")
+			require.NoError(t, err)
+
 			d.Items = tt.fields.Items
 
 			for _, item := range tt.args.longURLValue {
-				got := d.AddURL(item)
+				got, err := d.AddURL(item)
+				require.NoError(t, err)
 				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
 			}
 		})
@@ -116,7 +120,9 @@ func TestDictionary_GetURL(t *testing.T) {
 				MinShortURLLength: tt.fields.MinShortURLLength,
 				Items:             tt.fields.Items,
 			}
-			if got := d.GetURL(tt.args.shortURLValue); got != tt.want {
+			got, err := d.GetURL(tt.args.shortURLValue)
+			require.NoError(t, err)
+			if got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})

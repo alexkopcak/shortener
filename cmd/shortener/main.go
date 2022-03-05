@@ -1,9 +1,11 @@
 package main
 
 import (
+	"log"
+
 	"github.com/alexkopcak/shortener/internal/app"
 )
 
 func main() {
-	app.Run()
+	log.Fatal(app.Run())
 }

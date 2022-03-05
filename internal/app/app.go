@@ -2,7 +2,6 @@ package app
 
 import (
 	"flag"
-	"log"
 	"net/http"
 
 	"github.com/alexkopcak/shortener/internal/handlers"
@@ -16,12 +15,12 @@ type config struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 }
 
-func Run() {
+func Run() error {
 	// Env configuration
 	var cfg config
 	err := env.Parse(&cfg)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	// flags configuration
 	addrPointer := flag.String("a", cfg.ServerAddr, "Server address, example ip:port")
@@ -34,7 +33,10 @@ func Run() {
 	cfg.FileStoragePath = *fileStoragePathPointer
 
 	// Repository
-	dictionary := storage.NewDictionary(cfg.FileStoragePath)
+	dictionary, err := storage.NewDictionary(cfg.FileStoragePath)
+	if err != nil {
+		return err
+	}
 
 	//HTTP Server
 	server := &http.Server{
@@ -43,5 +45,5 @@ func Run() {
 	}
 
 	// start server
-	log.Fatal(server.ListenAndServe())
+	return server.ListenAndServe()
 }

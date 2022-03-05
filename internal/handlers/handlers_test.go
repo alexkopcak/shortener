@@ -287,7 +287,8 @@ func TestURLHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			w := httptest.NewRecorder()
-			d := storage.NewDictionary("")
+			d, err := storage.NewDictionary("")
+			require.NoError(t, err)
 			d.Items = tt.repo.Items
 			h := http.Server{
 				Handler: URLHandler(d, baseURL),

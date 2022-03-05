@@ -51,7 +51,11 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-		longURLValue := h.Repo.GetURL(idValue)
+		longURLValue, err := h.Repo.GetURL(idValue)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if longURLValue == "" {
 			http.Error(w, "There are no any short Urls!", http.StatusBadRequest)
 			return
@@ -83,7 +87,11 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue := h.Repo.AddURL(aliasRequest.LongURLValue)
+		requestValue, err := h.Repo.AddURL(aliasRequest.LongURLValue)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 
@@ -92,13 +100,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		}{
 			ResultValue: h.BaseURL + "/" + requestValue,
 		}
-		responseValueRaw, err := json.Marshal(responseValue)
-		if err != nil {
-			http.Error(w, "JSON marshaling error!", http.StatusBadRequest)
-			return
-		}
-		_, err = w.Write(responseValueRaw)
-		if err != nil {
+		if err := json.NewEncoder(w).Encode(&responseValue); err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}
@@ -124,7 +126,11 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue := h.Repo.AddURL(aliasRequest.LongURLValue)
+		requestValue, err := h.Repo.AddURL(aliasRequest.LongURLValue)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)

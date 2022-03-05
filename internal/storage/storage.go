@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"errors"
 	"io"
-	"log"
+
+	//	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -38,14 +40,14 @@ type Dictionary struct {
 	fileStoragePath         string
 }
 
-func NewDictionary(filepath string) *Dictionary {
+func NewDictionary(filepath string) (*Dictionary, error) {
 	items := make(map[string]string)
 
 	_, err := os.Stat(filepath)
 	if err == nil {
 		consumerItem, err := NewConsumer(filepath)
 		if err != nil {
-			log.Fatal(err.Error())
+			return nil, err
 		}
 		defer consumerItem.Close()
 		for {
@@ -54,7 +56,7 @@ func NewDictionary(filepath string) *Dictionary {
 				break
 			}
 			if err != nil {
-				log.Fatal(err.Error())
+				return nil, err
 			}
 			items[item.ShortURLValue] = item.LongURLValue
 		}
@@ -66,12 +68,12 @@ func NewDictionary(filepath string) *Dictionary {
 		AttemptsGenerateCount:   attemptsGenerateCountConst,
 		Items:                   items,
 		fileStoragePath:         filepath,
-	}
+	}, nil
 }
 
-func (d *Dictionary) AddURL(longURLValue string) string {
+func (d *Dictionary) AddURL(longURLValue string) (string, error) {
 	if longURLValue == "" || strings.TrimSpace(longURLValue) == "" {
-		return ""
+		return "", errors.New("empty long URL value")
 	}
 	for shortURLLengthIncrement := 0; shortURLLengthIncrement < d.ShortURLLengthIncrement; shortURLLengthIncrement++ {
 		for attempt := 0; attempt < d.AttemptsGenerateCount; attempt++ {
@@ -83,7 +85,7 @@ func (d *Dictionary) AddURL(longURLValue string) string {
 				if d.fileStoragePath != "" {
 					producer, err := NewProducer(d.fileStoragePath)
 					if err != nil {
-						log.Fatal(err)
+						return "", err
 					}
 					defer producer.Close()
 					err = producer.WriteItem(&ItemType{
@@ -91,22 +93,22 @@ func (d *Dictionary) AddURL(longURLValue string) string {
 						LongURLValue:  longURLValue,
 					})
 					if err != nil {
-						log.Fatal(err)
+						return "", err
 					}
 				}
-				return shortURLvalue
+				return shortURLvalue, nil
 			}
 		}
 	}
-	return ""
+	return "", errors.New("can't add long URL to storage")
 }
 
-func (d *Dictionary) GetURL(shortURLValue string) string {
+func (d *Dictionary) GetURL(shortURLValue string) (string, error) {
 	if shortURLValue == "" ||
 		strings.TrimSpace(shortURLValue) == "" ||
 		d.Items == nil ||
 		len(d.Items) == 0 {
-		return ""
+		return "", errors.New("empty short URL value")
 	}
-	return d.Items[shortURLValue]
+	return d.Items[shortURLValue], nil
 }
