@@ -87,8 +87,7 @@ func TestDictionary_AddURL(t *testing.T) {
 			d.Items = tt.fields.Items
 
 			for _, item := range tt.args.longURLValue {
-				got, err := d.AddURL(item)
-				require.NoError(t, err)
+				got, _ := d.AddURL(item)
 				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
 			}
 		})
@@ -120,9 +119,7 @@ func TestDictionary_GetURL(t *testing.T) {
 				MinShortURLLength: tt.fields.MinShortURLLength,
 				Items:             tt.fields.Items,
 			}
-			got, err := d.GetURL(tt.args.shortURLValue)
-			require.NoError(t, err)
-			if got != tt.want {
+			if got, _ := d.GetURL(tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})
