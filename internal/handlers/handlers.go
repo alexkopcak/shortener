@@ -60,13 +60,14 @@ func postDecompressMiddleware(next http.Handler) http.Handler {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			defer r.Body.Close()
 			defer gz.Close()
 			request, err := http.NewRequest(r.Method, r.URL.String(), gz)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
-
+			//fmt.Printf("%v", request)
 			next.ServeHTTP(w, request)
 		}
 		next.ServeHTTP(w, r)
