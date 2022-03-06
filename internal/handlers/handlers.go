@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
@@ -37,7 +39,9 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 		BaseURL: baseURL,
 	}
 
-	h.Mux.Use(middleware.Compress(5, defaultCompressibleContentTypes...))
+	h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
+	h.Mux.Use(postDecompressMiddleware)
+
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
@@ -45,6 +49,28 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func postDecompressMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		//		fmt.Println("in middleware")
+		if r.Method == http.MethodPost && strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			defer gz.Close()
+			request, err := http.NewRequest(r.Method, r.URL.String(), gz)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			next.ServeHTTP(w, request)
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (h *Handler) MethodNotAllowed() http.HandlerFunc {
