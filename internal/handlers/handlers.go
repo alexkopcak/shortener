@@ -40,7 +40,6 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	}
 
 	h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
-	h.Mux.Use(postDecompressMiddleware)
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Post("/", h.PostHandler())
@@ -49,29 +48,6 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h.Mux.NotFound(h.NotFound())
 
 	return h
-}
-
-func postDecompressMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//		fmt.Println("in middleware")
-		if r.Method == http.MethodPost && strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-			gz, err := gzip.NewReader(r.Body)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			defer r.Body.Close()
-			defer gz.Close()
-			request, err := http.NewRequest(r.Method, r.URL.String(), gz)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
-			//fmt.Printf("%v", request)
-			next.ServeHTTP(w, request)
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 func (h *Handler) MethodNotAllowed() http.HandlerFunc {
@@ -109,7 +85,21 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 
 func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		bodyRaw, err := io.ReadAll(r.Body)
+		var reader io.Reader
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			reader = gz
+			defer gz.Close()
+		} else {
+			reader = r.Body
+			defer r.Body.Close()
+		}
+
+		bodyRaw, err := io.ReadAll(reader)
 		if err != nil || len(bodyRaw) == 0 {
 			http.Error(w, "Body are not contain URL!", http.StatusBadRequest)
 			return
@@ -151,7 +141,21 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		bodyRaw, err := io.ReadAll(r.Body)
+		var reader io.Reader
+		if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
+			gz, err := gzip.NewReader(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			reader = gz
+			defer gz.Close()
+		} else {
+			reader = r.Body
+			defer r.Body.Close()
+		}
+
+		bodyRaw, err := io.ReadAll(reader)
 		if err != nil || len(bodyRaw) == 0 {
 			http.Error(w, "Body are not contain URL!", http.StatusBadRequest)
 			return
