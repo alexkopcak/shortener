@@ -8,12 +8,26 @@ import (
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Handler struct {
 	*chi.Mux
 	Repo    storage.Dictionary
 	BaseURL string
+}
+
+var defaultCompressibleContentTypes = []string{
+	"text/html",
+	"text/css",
+	"text/plain",
+	"text/javascript",
+	"application/javascript",
+	"application/x-javascript",
+	"application/json",
+	"application/atom+xml",
+	"application/rss+xml",
+	"image/svg+xml",
 }
 
 func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
@@ -23,6 +37,7 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 		BaseURL: baseURL,
 	}
 
+	h.Mux.Use(middleware.Compress(5, defaultCompressibleContentTypes...))
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())

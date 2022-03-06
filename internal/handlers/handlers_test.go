@@ -296,7 +296,7 @@ func TestURLHandler(t *testing.T) {
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
 
-			fmt.Println(&tt.repo)
+			//fmt.Println(&tt.repo)
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.location, result.Header.Get("Location"))
