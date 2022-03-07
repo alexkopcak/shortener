@@ -10,7 +10,6 @@ import (
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 )
 
 type Handler struct {
@@ -19,18 +18,27 @@ type Handler struct {
 	BaseURL string
 }
 
-var defaultCompressibleContentTypes = []string{
-	"text/html",
-	"text/css",
-	"text/plain",
-	"text/javascript",
-	"application/javascript",
-	"application/x-javascript",
-	"application/json",
-	"application/atom+xml",
-	"application/rss+xml",
-	"image/svg+xml",
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
 }
+
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
+
+// var defaultCompressibleContentTypes = []string{
+// 	"text/html",
+// 	"text/css",
+// 	"text/plain",
+// 	"text/javascript",
+// 	"application/javascript",
+// 	"application/x-javascript",
+// 	"application/json",
+// 	"application/atom+xml",
+// 	"application/rss+xml",
+// 	"image/svg+xml",
+// }
 
 func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h := &Handler{
@@ -39,7 +47,11 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 		BaseURL: baseURL,
 	}
 
-	h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
+	//встроенный функционал
+	//h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
+
+	// самописный мидлваре
+	h.Mux.Use(gzipMiddlewareHandle)
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Post("/", h.PostHandler())
@@ -48,6 +60,23 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func gzipMiddlewareHandle(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+	})
 }
 
 func (h *Handler) MethodNotAllowed() http.HandlerFunc {
