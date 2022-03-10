@@ -188,6 +188,8 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if len(h.Repo.Items) == 0 {
 			w.WriteHeader(http.StatusNoContent)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte("[]"))
 			return
 		}
 
