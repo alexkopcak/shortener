@@ -335,3 +335,38 @@ func TestURLHandler(t *testing.T) {
 		})
 	}
 }
+
+func TestCookie(t *testing.T) {
+	tests := []struct {
+		name     string
+		target   string
+		template string
+		body     string
+		method   string
+		cookie   string
+	}{
+		{
+			name:     "not empty cookie",
+			target:   baseURL,
+			template: "%s",
+			body:     "http://abc.test/abc/abd",
+			method:   http.MethodPost,
+			cookie:   "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
+			w := httptest.NewRecorder()
+			d, err := storage.NewDictionary("")
+			require.NoError(t, err)
+			h := http.Server{
+				Handler: URLHandler(d, baseURL),
+			}
+			h.Handler.ServeHTTP(w, request)
+			require.NotEmpty(t, w.Result().Cookies(), "cookies field are empty")
+		},
+		)
+	}
+}
