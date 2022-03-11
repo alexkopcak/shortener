@@ -4,7 +4,6 @@ import (
 	"errors"
 	"io"
 
-	//	"log"
 	"math/rand"
 	"os"
 	"strings"
@@ -27,18 +26,26 @@ func shortURLGenerator(n int) string {
 	return string(b)
 }
 
-type ItemType struct {
-	ShortURLValue string `json:"shortURLValue"`
-	LongURLValue  string `json:"longURLValue"`
-}
+type (
+	ItemType struct {
+		ShortURLValue string `json:"shortURLValue"`
+		LongURLValue  string `json:"longURLValue"`
+	}
 
-type Dictionary struct {
-	MinShortURLLength       int
-	ShortURLLengthIncrement int
-	AttemptsGenerateCount   int
-	Items                   map[string]string
-	fileStoragePath         string
-}
+	UserExportType struct {
+		ShortURL    string `json:"short_url"`
+		OriginalURL string `json:"original_url"`
+	}
+
+	Dictionary struct {
+		MinShortURLLength       int
+		ShortURLLengthIncrement int
+		AttemptsGenerateCount   int
+		Items                   map[string]string
+		UserItems               map[uint64][]string
+		fileStoragePath         string
+	}
+)
 
 func NewDictionary(filepath string) (*Dictionary, error) {
 	items := make(map[string]string)
@@ -71,7 +78,7 @@ func NewDictionary(filepath string) (*Dictionary, error) {
 	}, nil
 }
 
-func (d *Dictionary) AddURL(longURLValue string) (string, error) {
+func (d *Dictionary) AddURL(longURLValue string, userID uint64) (string, error) {
 	if longURLValue == "" || strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
 	}
@@ -81,6 +88,7 @@ func (d *Dictionary) AddURL(longURLValue string) (string, error) {
 			_, exsist := d.Items[shortURLvalue]
 			if !exsist {
 				d.Items[shortURLvalue] = longURLValue
+				d.UserItems[userID] = append(d.UserItems[userID], shortURLvalue)
 
 				if d.fileStoragePath != "" {
 					producer, err := NewProducer(d.fileStoragePath)
@@ -111,4 +119,27 @@ func (d *Dictionary) GetURL(shortURLValue string) (string, error) {
 		return "", errors.New("empty short URL value")
 	}
 	return d.Items[shortURLValue], nil
+}
+
+func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
+	result := []UserExportType{}
+	for _, v := range d.UserItems[userID] {
+		longURL, err := d.GetURL(v)
+		item := UserExportType{}
+
+		if prefix == "" ||
+			strings.TrimSpace(prefix) == "" {
+			item.ShortURL = v
+		} else {
+			item.ShortURL = prefix + "/" + v
+		}
+
+		if err != nil {
+			item.OriginalURL = longURL
+		} else {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
 }

@@ -9,12 +9,6 @@ import (
 	"github.com/caarlos0/env"
 )
 
-type config struct {
-	ServerAddr      string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
-	BaseURL         string `env:"BASE_URL" envDefault:"http://localhost:8080"`
-	FileStoragePath string `env:"FILE_STORAGE_PATH"`
-}
-
 func Run() error {
 	// Env configuration
 	var cfg config
@@ -41,7 +35,7 @@ func Run() error {
 	//HTTP Server
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(dictionary, cfg.BaseURL),
+		Handler: handlers.URLHandler(dictionary, cfg.BaseURL, cfg.SecretKey, cfg.CookieAuthName),
 	}
 
 	// start server
