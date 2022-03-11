@@ -37,18 +37,18 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-var defaultCompressibleContentTypes = []string{
-	"text/html",
-	"text/css",
-	"text/plain",
-	"text/javascript",
-	"application/javascript",
-	"application/x-javascript",
-	"application/json",
-	"application/atom+xml",
-	"application/rss+xml",
-	"image/svg+xml",
-}
+// var defaultCompressibleContentTypes = []string{
+// 	"text/html",
+// 	"text/css",
+// 	"text/plain",
+// 	"text/javascript",
+// 	"application/javascript",
+// 	"application/x-javascript",
+// 	"application/json",
+// 	"application/atom+xml",
+// 	"application/rss+xml",
+// 	"image/svg+xml",
+// }
 
 func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h := &Handler{
