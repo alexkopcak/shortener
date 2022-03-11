@@ -87,7 +87,7 @@ func TestDictionary_AddURL(t *testing.T) {
 			d.Items = tt.fields.Items
 
 			for _, item := range tt.args.longURLValue {
-				got, _ := d.AddURL(item)
+				got, _ := d.AddURL(item, 0)
 				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
 			}
 		})

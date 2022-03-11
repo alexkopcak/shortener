@@ -49,6 +49,7 @@ type (
 
 func NewDictionary(filepath string) (*Dictionary, error) {
 	items := make(map[string]string)
+	userItems := make(map[uint64][]string)
 
 	_, err := os.Stat(filepath)
 	if err == nil {
@@ -74,6 +75,7 @@ func NewDictionary(filepath string) (*Dictionary, error) {
 		ShortURLLengthIncrement: shortURLLengthIncrementConst,
 		AttemptsGenerateCount:   attemptsGenerateCountConst,
 		Items:                   items,
+		UserItems:               userItems,
 		fileStoragePath:         filepath,
 	}, nil
 }
