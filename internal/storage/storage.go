@@ -2,7 +2,6 @@ package storage
 
 import (
 	"errors"
-	"fmt"
 	"io"
 
 	"math/rand"
@@ -138,13 +137,8 @@ func (d *Dictionary) GetURL(shortURLValue string) (string, error) {
 
 func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
 	result := []UserExportType{}
-	fmt.Printf("userID %v\n", userID)
-	fmt.Printf("result %v\n", result)
-	fmt.Printf("d.UserItems %v\n", d.UserItems)
 	for _, v := range d.UserItems[userID] {
-		fmt.Printf("v %v\n", v)
 		longURL, err := d.GetURL(v)
-		fmt.Printf("longURL %v\n", longURL)
 
 		item := UserExportType{}
 		if err != nil {
@@ -152,7 +146,6 @@ func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
 		} else {
 			item.OriginalURL = longURL
 		}
-		fmt.Printf("item %v\n", item)
 
 		if prefix == "" ||
 			strings.TrimSpace(prefix) == "" {
@@ -160,8 +153,6 @@ func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
 		} else {
 			item.ShortURL = prefix + "/" + v
 		}
-		fmt.Printf("item %v\n", item)
-
 		result = append(result, item)
 	}
 	return result
