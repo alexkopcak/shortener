@@ -21,6 +21,22 @@ func NewProducer(filename string) (*producer, error) {
 	}, nil
 }
 
+func ProducerWrite(filename string, item *ItemType) error {
+	if filename == "" {
+		return nil
+	}
+	producer, err := NewProducer(filename)
+	if err != nil {
+		return err
+	}
+	defer producer.Close()
+	err = producer.WriteItem(item)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (p *producer) WriteItem(item *ItemType) error {
 	return p.encoder.Encode(&item)
 }
