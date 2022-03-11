@@ -124,11 +124,11 @@ func authMiddlewareHandler(next http.Handler) http.Handler {
 		// }
 		_, err := decodeAuthCookie(cookie)
 		if err != nil {
-			cookie, err = generateAuthCookie()
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusBadRequest)
-				return
-			}
+			cookie, _ = generateAuthCookie()
+			// if err != nil {
+			// 	http.Error(w, err.Error(), http.StatusBadRequest)
+			// 	return
+			// }
 			http.SetCookie(w, cookie)
 		}
 		next.ServeHTTP(w, r)
