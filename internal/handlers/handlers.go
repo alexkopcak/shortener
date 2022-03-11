@@ -116,12 +116,13 @@ func generateAuthCookie() (*http.Cookie, error) {
 
 func authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(cookieAuthName)
-		if err != nil && err != http.ErrNoCookie {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		_, err = decodeAuthCookie(cookie)
+		//cookie, err := r.Cookie(cookieAuthName)
+		cookie, _ := r.Cookie(cookieAuthName)
+		// if err != nil && err != http.ErrNoCookie {
+		// 	http.Error(w, err.Error(), http.StatusBadRequest)
+		// 	return
+		// }
+		_, err := decodeAuthCookie(cookie)
 		if err != nil {
 			cookie, err = generateAuthCookie()
 			if err != nil {
