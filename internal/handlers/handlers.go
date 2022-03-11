@@ -14,7 +14,6 @@ import (
 
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
-	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -29,14 +28,14 @@ type Handler struct {
 	BaseURL string
 }
 
-// type gzipWriter struct {
-// 	http.ResponseWriter
-// 	Writer io.Writer
-// }
+type gzipWriter struct {
+	http.ResponseWriter
+	Writer io.Writer
+}
 
-// func (w gzipWriter) Write(b []byte) (int, error) {
-// 	return w.Writer.Write(b)
-// }
+func (w gzipWriter) Write(b []byte) (int, error) {
+	return w.Writer.Write(b)
+}
 
 var defaultCompressibleContentTypes = []string{
 	"text/html",
@@ -59,9 +58,9 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	}
 
 	//встроенный функционал
-	h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
+	//h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
 	// самописный миддлваре gzip
-	//h.Mux.Use(gzipMiddlewareHandler)
+	h.Mux.Use(gzipMiddlewareHandler)
 
 	h.Mux.Use(authMiddlewareHandler)
 
@@ -117,40 +116,40 @@ func generateAuthCookie() (*http.Cookie, error) {
 func authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		//cookie, err := r.Cookie(cookieAuthName)
-		cookie, _ := r.Cookie(cookieAuthName)
-		// if err != nil && err != http.ErrNoCookie {
-		// 	http.Error(w, err.Error(), http.StatusBadRequest)
-		// 	return
-		// }
-		_, err := decodeAuthCookie(cookie)
+		cookie, err := r.Cookie(cookieAuthName)
+		if err != nil && err != http.ErrNoCookie {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		_, err = decodeAuthCookie(cookie)
 		if err != nil {
-			cookie, _ = generateAuthCookie()
-			// if err != nil {
-			// 	http.Error(w, err.Error(), http.StatusBadRequest)
-			// 	return
-			// }
+			cookie, err = generateAuthCookie()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 			http.SetCookie(w, cookie)
 		}
 		next.ServeHTTP(w, r)
 	})
 }
 
-// func gzipMiddlewareHandler(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-// 			next.ServeHTTP(w, r)
-// 			return
-// 		}
-// 		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
-// 		if err != nil {
-// 			http.Error(w, err.Error(), http.StatusBadRequest)
-// 			return
-// 		}
-// 		defer gz.Close()
-// 		w.Header().Set("Content-Encoding", "gzip")
-// 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
-// 	})
-// }
+func gzipMiddlewareHandler(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			next.ServeHTTP(w, r)
+			return
+		}
+		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		defer gz.Close()
+		w.Header().Set("Content-Encoding", "gzip")
+		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+	})
+}
 
 func (h *Handler) MethodNotAllowed() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
