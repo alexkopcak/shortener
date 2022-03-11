@@ -14,6 +14,7 @@ import (
 
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -28,27 +29,27 @@ type Handler struct {
 	BaseURL string
 }
 
-type gzipWriter struct {
-	http.ResponseWriter
-	Writer io.Writer
-}
-
-func (w gzipWriter) Write(b []byte) (int, error) {
-	return w.Writer.Write(b)
-}
-
-// var defaultCompressibleContentTypes = []string{
-// 	"text/html",
-// 	"text/css",
-// 	"text/plain",
-// 	"text/javascript",
-// 	"application/javascript",
-// 	"application/x-javascript",
-// 	"application/json",
-// 	"application/atom+xml",
-// 	"application/rss+xml",
-// 	"image/svg+xml",
+// type gzipWriter struct {
+// 	http.ResponseWriter
+// 	Writer io.Writer
 // }
+
+// func (w gzipWriter) Write(b []byte) (int, error) {
+// 	return w.Writer.Write(b)
+// }
+
+var defaultCompressibleContentTypes = []string{
+	"text/html",
+	"text/css",
+	"text/plain",
+	"text/javascript",
+	"application/javascript",
+	"application/x-javascript",
+	"application/json",
+	"application/atom+xml",
+	"application/rss+xml",
+	"image/svg+xml",
+}
 
 func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	h := &Handler{
@@ -58,14 +59,14 @@ func URLHandler(repo *storage.Dictionary, baseURL string) *Handler {
 	}
 
 	//встроенный функционал
-	//h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
+	h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
 	// самописный миддлваре gzip
-	h.Mux.Use(gzipMiddlewareHandler)
+	//h.Mux.Use(gzipMiddlewareHandler)
 
 	h.Mux.Use(authMiddlewareHandler)
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
-	h.Mux.Get("/api/users/urls", h.GetAPIAllURLHandler())
+	h.Mux.Get("/api/user/urls", h.GetAPIAllURLHandler())
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
@@ -115,7 +116,6 @@ func generateAuthCookie() (*http.Cookie, error) {
 
 func authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		//cookie, err := r.Cookie(cookieAuthName)
 		cookie, err := r.Cookie(cookieAuthName)
 		if err != nil && err != http.ErrNoCookie {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -134,22 +134,22 @@ func authMiddlewareHandler(next http.Handler) http.Handler {
 	})
 }
 
-func gzipMiddlewareHandler(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-			next.ServeHTTP(w, r)
-			return
-		}
-		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		defer gz.Close()
-		w.Header().Set("Content-Encoding", "gzip")
-		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
-	})
-}
+// func gzipMiddlewareHandler(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		if !strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+// 			next.ServeHTTP(w, r)
+// 			return
+// 		}
+// 		gz, err := gzip.NewWriterLevel(w, gzip.DefaultCompression)
+// 		if err != nil {
+// 			http.Error(w, err.Error(), http.StatusBadRequest)
+// 			return
+// 		}
+// 		defer gz.Close()
+// 		w.Header().Set("Content-Encoding", "gzip")
+// 		next.ServeHTTP(gzipWriter{ResponseWriter: w, Writer: gz}, r)
+// 	})
+// }
 
 func (h *Handler) MethodNotAllowed() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
