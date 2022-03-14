@@ -8,6 +8,8 @@ import (
 	"github.com/alexkopcak/shortener/internal/handlers"
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/caarlos0/env"
+	_ "github.com/jackc/pgx"
+	_ "github.com/lib/pq"
 )
 
 func Run() error {
@@ -35,7 +37,7 @@ func Run() error {
 	}
 
 	// database
-	//var db *sql.DB
+	// cfg.DBConnectionString = "postgres://postgres:mypassword@localhost:5432/postgres"
 	if cfg.DBConnectionString != "" {
 		cfg.DB, err = sql.Open("postgres", cfg.DBConnectionString)
 		if err != nil {

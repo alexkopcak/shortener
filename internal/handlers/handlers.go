@@ -84,15 +84,15 @@ func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
 
 func (h *Handler) GetPing(cfg Config) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-		defer cancel()
-
-		if cfg.DB.PingContext(ctx) != nil {
-			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusInternalServerError)
+		if cfg.DB != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+			if cfg.DB.PingContext(ctx) != nil {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 		}
-
+		w.WriteHeader(http.StatusInternalServerError)
 	})
 }
 
