@@ -113,7 +113,6 @@ func (ps *PostgresStorage) Ping() error {
 }
 
 type Dictionary struct {
-	//MinShortURLLength int
 	Items           map[string]string
 	UserItems       map[uint64][]string
 	fileStoragePath string
