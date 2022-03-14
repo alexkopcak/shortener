@@ -21,6 +21,7 @@ func Run() error {
 	baseAddrPointer := flag.String("b", cfg.BaseURL, "Base URL address, example http://127.0.0.1:8080")
 	fileStoragePathPointer := flag.String("f", cfg.FileStoragePath, "File storage path")
 	dbConnectionString := flag.String("d", cfg.DBConnectionString, "DB Connection string")
+	dbConnectionString = flag.String("database-dsn", *dbConnectionString, "DB Connection string")
 	flag.Parse()
 
 	cfg.BaseURL = *baseAddrPointer
