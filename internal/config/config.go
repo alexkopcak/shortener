@@ -6,5 +6,5 @@ type Config struct {
 	FileStoragePath    string `env:"FILE_STORAGE_PATH"`
 	SecretKey          string `env:"SHORTENER_SECRET_KEY" envDefault:"We learn Go language"`
 	CookieAuthName     string `env:"COOKIE_ATUH_NAME" envDefault:"shortenerId"`
-	DBConnectionString string `env:"DATABASE_DSN" envDefault:"postgres://postgres:mypassword@localhost:5432/shortner_db"`
+	DBConnectionString string `env:"DATABASE_DSN" envDefault:"postgres://user:mypass@localhost:5432/shortner"`
 }
