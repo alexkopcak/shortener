@@ -1,6 +1,7 @@
 package app
 
 import (
+	"database/sql"
 	"flag"
 	"net/http"
 
@@ -31,6 +32,17 @@ func Run() error {
 	dictionary, err := storage.NewDictionary(cfg.FileStoragePath)
 	if err != nil {
 		return err
+	}
+
+	// database
+	//var db *sql.DB
+	if cfg.DBConnectionString != "" {
+		cfg.DB, err = sql.Open("postgres", cfg.DBConnectionString)
+		if err != nil {
+			cfg.DB = nil
+		} else {
+			defer cfg.DB.Close()
+		}
 	}
 
 	//HTTP Server

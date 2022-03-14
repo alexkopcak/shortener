@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
@@ -72,12 +73,27 @@ func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Get("/api/user/urls", h.GetAPIAllURLHandler())
+	h.Mux.Get("/ping", h.GetPing(cfg))
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func (h *Handler) GetPing(cfg Config) http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+		defer cancel()
+
+		if cfg.DB.PingContext(ctx) != nil {
+			w.WriteHeader(http.StatusOK)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+
+	})
 }
 
 func gzipMiddlewareHandle(next http.Handler) http.Handler {

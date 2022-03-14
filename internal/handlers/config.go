@@ -1,5 +1,7 @@
 package handlers
 
+import "database/sql"
+
 type Config struct {
 	ServerAddr         string `env:"SERVER_ADDRESS" envDefault:"localhost:8080"`
 	BaseURL            string `env:"BASE_URL" envDefault:"http://localhost:8080"`
@@ -7,4 +9,5 @@ type Config struct {
 	SecretKey          string `env:"SHORTENER_SECRET_KEY" envDefault:"We learn Go language"`
 	CookieAuthName     string `env:"COOKIE_ATUH_NAME" envDefault:"shortenerId"`
 	DBConnectionString string `env:"DATABASE_DSN"`
+	DB                 *sql.DB
 }
