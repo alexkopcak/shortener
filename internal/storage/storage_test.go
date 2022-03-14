@@ -3,95 +3,60 @@ package storage
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
+	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDictionary_AddURL(t *testing.T) {
-	type fields struct {
-		MinShortURLLength int
-		Items             map[string]string
-	}
-	type args struct {
-		longURLValue []string
-	}
+	// type fields struct {
+	// 	MinShortURLLength int
+	// 	Items             map[string]string
+	// }
+	// type args struct {
+	// 	longURLValue string
+	// }
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
+		name         string
+		longURLValue string
+		err          bool
 	}{
 		{
-			name: "add value",
-			fields: fields{
-				MinShortURLLength: 5,
-				Items:             map[string]string{},
-			},
-			args: args{
-				longURLValue: []string{"http://abc.test/abc"},
-			},
+			name:         "add value",
+			longURLValue: "http://abc.test/abc",
+			err:          false,
 		},
 		{
-			name: "add the same value twise #1",
-			fields: fields{
-				MinShortURLLength: 5,
-				Items: map[string]string{
-					"0a1b2": "http://abc.test/abc",
-				},
-			},
-			args: args{
-				longURLValue: []string{"http://abc.test/abc"},
-			},
+			name:         "add empty value",
+			longURLValue: "",
+			err:          true,
 		},
 		{
-			name: "add the same value twise #2",
-			fields: fields{
-				MinShortURLLength: 5,
-				Items: map[string]string{
-					"0a1b2": "http://abc.test/abc",
-				},
-			},
-			args: args{
-				longURLValue: []string{
-					"http://abc.test/abc",
-					"http://abc.test/abc",
-				},
-			},
-		},
-		{
-			name: "add empty value",
-			fields: fields{
-				MinShortURLLength: 5,
-				Items:             map[string]string{},
-			},
-			args: args{
-				longURLValue: []string{""},
-			},
-		},
-		{
-			name: "add space value",
-			fields: fields{
-				MinShortURLLength: 5,
-				Items:             map[string]string{},
-			},
-			args: args{
-				longURLValue: []string{" "},
-			},
+			name:         "add space value",
+			longURLValue: " ",
+			err:          true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := NewDictionary("")
+			d, err := NewDictionary(config.Config{})
 			require.NoError(t, err)
+			got, err := d.AddURL(tt.longURLValue, 0)
+			if tt.err {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
 
-			d.Items = tt.fields.Items
-
-			for _, item := range tt.args.longURLValue {
-				got, _ := d.AddURL(item, 0)
-				assert.Equal(t, strings.TrimSpace(item), d.Items[got])
+				longValue, err := d.GetURL(got)
+				require.NoError(t, err)
+				assert.Equal(t, longValue, tt.longURLValue)
 			}
+			//for _, item := range tt.args.longURLValue {
+			//	got, _ := d.AddURL(item, 0)
+			//	assert.Equal(t, strings.TrimSpace(item), dd.Items[got])
+			//}
 		})
 	}
 }
@@ -118,8 +83,7 @@ func TestDictionary_GetURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Dictionary{
-				MinShortURLLength: tt.fields.MinShortURLLength,
-				Items:             tt.fields.Items,
+				Items: tt.fields.Items,
 			}
 			if got, _ := d.GetURL(tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
@@ -218,10 +182,9 @@ func TestDictionary_GetUserURL(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := &Dictionary{
-				MinShortURLLength: tt.fields.MinShortURLLength,
-				Items:             tt.fields.Items,
-				UserItems:         tt.fields.UserItems,
-				fileStoragePath:   tt.fields.fileStoragePath,
+				Items:           tt.fields.Items,
+				UserItems:       tt.fields.UserItems,
+				fileStoragePath: tt.fields.fileStoragePath,
 			}
 			fmt.Printf("%v\n", *d)
 			if got := d.GetUserURL(tt.args.prefix, tt.args.userID); !reflect.DeepEqual(got, tt.want) {

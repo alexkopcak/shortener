@@ -1,59 +1,131 @@
 package storage
 
 import (
+	"context"
 	"errors"
 	"io"
+	"time"
 
-	"math/rand"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/alexkopcak/shortener/internal/config"
+	"github.com/jackc/pgx/v4"
 )
 
 const (
-	//shortURLLengthIncrementConst = 5
 	minShortURLLengthConst = 5
-	//attemptsGenerateCountConst   = 5
 )
 
-func shortURLGenerator(n int) string {
-	rand.Seed(time.Now().UnixNano())
-	var letterRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
-	}
-	return string(b)
+type Storage interface {
+	AddURL(longURLValue string, userID uint64) (string, error)
+	GetURL(shortURLValue string) (string, error)
+	GetUserURL(prefix string, userID uint64) []UserExportType
+	Ping() error
 }
 
-type (
-	ItemType struct {
-		ShortURLValue string `json:"shortURLValue"`
-		LongURLValue  string `json:"longURLValue"`
+func InitializeStorage(cfg config.Config) (Storage, error) {
+	if strings.TrimSpace(cfg.DBConnectionString) == "" {
+		return NewPostgresStorage(cfg)
+	} else {
+		return NewDictionary(cfg)
+	}
+}
+
+type PostgresStorage struct {
+	db *pgx.Conn
+}
+
+func NewPostgresStorage(cfg config.Config) (Storage, error) {
+	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
+	if err != nil {
+		return NewDictionary(cfg)
+	}
+	defer ps.Close(context.Background())
+
+	_, err = ps.Exec(context.Background(), "CREATE TABLE IF NOT EXSISTS shortener (user_id BIGINT short_url VARCHAR(5) original_url VARCHAR(255));")
+	if err != nil {
+		return NewDictionary(cfg)
 	}
 
-	UserExportType struct {
-		ShortURL    string `json:"short_url"`
-		OriginalURL string `json:"original_url"`
+	return &PostgresStorage{
+		db: ps,
+	}, nil
+}
+
+func (ps *PostgresStorage) AddURL(longURLValue string, userID uint64) (string, error) {
+	if strings.TrimSpace(longURLValue) == "" {
+		return "", errors.New("empty long URL value")
 	}
 
-	Dictionary struct {
-		MinShortURLLength int
-		//		ShortURLLengthIncrement int
-		//		AttemptsGenerateCount   int
-		Items           map[string]string
-		UserItems       map[uint64][]string
-		fileStoragePath string
+	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
+	_, err := ps.db.Exec(context.Background(), "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3)", userID, shortURLvalue, longURLValue)
+	if err != nil {
+		return "", err
 	}
-)
+	return shortURLvalue, nil
+}
 
-func NewDictionary(filepath string) (*Dictionary, error) {
+func (ps *PostgresStorage) GetURL(shortURLValue string) (string, error) {
+	var longURL string
+	err := ps.db.QueryRow(context.Background(), "SELECT original_url FROM shortener WHERE short_url = $1", shortURLValue).Scan(&longURL)
+	if err != nil {
+		return "", err
+	}
+	return longURL, nil
+}
+
+func (ps *PostgresStorage) GetUserURL(prefix string, userID uint64) []UserExportType {
+	result := []UserExportType{}
+	rows, err := ps.db.Query(context.Background(), "SELECT short_url, original_url FROM shortener WHERE user_id = $1", userID)
+	if err != nil {
+		return result
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		item := UserExportType{}
+		var value string
+		err := rows.Scan(&value, &item.OriginalURL)
+		if err != nil {
+			continue
+		}
+
+		if strings.TrimSpace(prefix) == "" {
+			item.ShortURL = value
+		} else {
+			item.ShortURL = prefix + "/" + value
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+func (ps *PostgresStorage) Ping() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	err := ps.db.Ping(ctx)
+	if err != nil {
+		return err
+	}
+	return err
+}
+
+type Dictionary struct {
+	//MinShortURLLength int
+	Items           map[string]string
+	UserItems       map[uint64][]string
+	fileStoragePath string
+}
+
+func NewDictionary(cfg config.Config) (Storage, error) {
 	items := make(map[string]string)
 	userItems := make(map[uint64][]string)
 
-	_, err := os.Stat(filepath)
+	_, err := os.Stat(cfg.FileStoragePath)
 	if err == nil {
-		consumerItem, err := NewConsumer(filepath)
+		consumerItem, err := NewConsumer(cfg.FileStoragePath)
 		if err != nil {
 			return nil, err
 		}
@@ -71,12 +143,9 @@ func NewDictionary(filepath string) (*Dictionary, error) {
 	}
 
 	return &Dictionary{
-		MinShortURLLength: minShortURLLengthConst,
-		//	ShortURLLengthIncrement: shortURLLengthIncrementConst,
-		//	AttemptsGenerateCount:   attemptsGenerateCountConst,
 		Items:           items,
 		UserItems:       userItems,
-		fileStoragePath: filepath,
+		fileStoragePath: cfg.FileStoragePath,
 	}, nil
 }
 
@@ -85,7 +154,7 @@ func (d *Dictionary) AddURL(longURLValue string, userID uint64) (string, error) 
 		return "", errors.New("empty long URL value")
 	}
 
-	shortURLvalue := shortURLGenerator(d.MinShortURLLength)
+	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
 	d.Items[shortURLvalue] = longURLValue
 	d.UserItems[userID] = append(d.UserItems[userID], shortURLvalue)
 
@@ -98,35 +167,6 @@ func (d *Dictionary) AddURL(longURLValue string, userID uint64) (string, error) 
 
 	return shortURLvalue, nil
 }
-
-// 	for shortURLLengthIncrement := 0; shortURLLengthIncrement < d.ShortURLLengthIncrement; shortURLLengthIncrement++ {
-// 		for attempt := 0; attempt < d.AttemptsGenerateCount; attempt++ {
-// 			shortURLvalue := shortURLGenerator(d.MinShortURLLength + shortURLLengthIncrement)
-// 			_, exsist := d.Items[shortURLvalue]
-// 			if !exsist {
-// 				d.Items[shortURLvalue] = longURLValue
-// 				d.UserItems[userID] = append(d.UserItems[userID], shortURLvalue)
-
-// 				if d.fileStoragePath != "" {
-// 					producer, err := NewProducer(d.fileStoragePath)
-// 					if err != nil {
-// 						return "", err
-// 					}
-// 					defer producer.Close()
-// 					err = producer.WriteItem(&ItemType{
-// 						ShortURLValue: shortURLvalue,
-// 						LongURLValue:  longURLValue,
-// 					})
-// 					if err != nil {
-// 						return "", err
-// 					}
-// 				}
-// 				return shortURLvalue, nil
-// 			}
-// 		}
-// 	}
-// 	return "", errors.New("can't add long URL to storage")
-// }
 
 func (d *Dictionary) GetURL(shortURLValue string) (string, error) {
 	if strings.TrimSpace(shortURLValue) == "" {
@@ -156,4 +196,8 @@ func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
 		result = append(result, item)
 	}
 	return result
+}
+
+func (d *Dictionary) Ping() error {
+	return nil
 }

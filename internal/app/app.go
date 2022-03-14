@@ -1,10 +1,10 @@
 package app
 
 import (
-	"database/sql"
 	"flag"
 	"net/http"
 
+	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/alexkopcak/shortener/internal/handlers"
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/caarlos0/env"
@@ -14,9 +14,8 @@ import (
 
 func Run() error {
 	// Env configuration
-	var cfg handlers.Config
-	err := env.Parse(&cfg)
-	if err != nil {
+	var cfg config.Config
+	if err := env.Parse(&cfg); err != nil {
 		return err
 	}
 	// flags configuration
@@ -30,27 +29,17 @@ func Run() error {
 	cfg.ServerAddr = *addrPointer
 	cfg.FileStoragePath = *fileStoragePathPointer
 	cfg.DBConnectionString = *dbConnectionString
+
 	// Repository
-	dictionary, err := storage.NewDictionary(cfg.FileStoragePath)
+	repository, err := storage.InitializeStorage(cfg)
 	if err != nil {
 		return err
-	}
-
-	// database
-	// cfg.DBConnectionString = "postgres://postgres:mypassword@localhost:5432/postgres"
-	if cfg.DBConnectionString != "" {
-		cfg.DB, err = sql.Open("postgres", cfg.DBConnectionString)
-		if err != nil {
-			cfg.DB = nil
-		} else {
-			defer cfg.DB.Close()
-		}
 	}
 
 	//HTTP Server
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(dictionary, cfg),
+		Handler: handlers.URLHandler(repository, cfg),
 	}
 
 	// start server

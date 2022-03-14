@@ -12,8 +12,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
+	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
@@ -22,10 +22,8 @@ import (
 type (
 	Handler struct {
 		*chi.Mux
-		Repo           storage.Dictionary
-		BaseURL        string
-		secretKey      string
-		cookieAuthName string
+		Repo storage.Storage
+		Cfg  config.Config
 	}
 
 	key uint64
@@ -44,36 +42,19 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// var defaultCompressibleContentTypes = []string{
-// 	"text/html",
-// 	"text/css",
-// 	"text/plain",
-// 	"text/javascript",
-// 	"application/javascript",
-// 	"application/x-javascript",
-// 	"application/json",
-// 	"application/atom+xml",
-// 	"application/rss+xml",
-// 	"image/svg+xml",
-// }
-
-//func URLHandler(repo *storage.Dictionary, baseURL string, secretKey string, cookieAuthName string) *Handler {
-func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
+func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
 	h := &Handler{
-		Mux:            chi.NewMux(),
-		Repo:           *repo,
-		BaseURL:        cfg.BaseURL,
-		secretKey:      cfg.SecretKey,
-		cookieAuthName: cfg.CookieAuthName,
+		Mux:  chi.NewMux(),
+		Repo: repo,
+		Cfg:  cfg,
 	}
 
 	h.Mux.Use(h.authMiddlewareHandler)
 	h.Mux.Use(gzipMiddlewareHandle)
-	//h.Mux.Use(middleware.Compress(gzip.DefaultCompression, defaultCompressibleContentTypes...))
 
 	h.Mux.Get("/{idValue}", h.GetHandler())
 	h.Mux.Get("/api/user/urls", h.GetAPIAllURLHandler())
-	h.Mux.Get("/ping", h.GetPing(cfg))
+	h.Mux.Get("/ping", h.Ping())
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
@@ -82,19 +63,11 @@ func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
 	return h
 }
 
-func (h *Handler) GetPing(cfg Config) http.HandlerFunc {
+func (h *Handler) Ping() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if cfg.DB != nil {
-			// if cfg.DB.Ping() != nil {
-			// 	w.WriteHeader(http.StatusOK)
-			// 	return
-			// }
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			if cfg.DB.PingContext(ctx) != nil {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
+		if h.Repo.Ping() == nil {
+			w.WriteHeader(http.StatusOK)
+			return
 		}
 		w.WriteHeader(http.StatusInternalServerError)
 	})
@@ -138,7 +111,7 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (uint64, error) {
 
 	id := binary.BigEndian.Uint64(data[:8])
 
-	hm := hmac.New(sha256.New, []byte(h.secretKey))
+	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
 	hm.Write(data[:8])
 	sign := hm.Sum(nil)
 	if hmac.Equal(data[8:], sign) {
@@ -155,12 +128,12 @@ func (h *Handler) generateAuthCookie() (*http.Cookie, uint64, error) {
 		return nil, 0, err
 	}
 
-	hm := hmac.New(sha256.New, []byte(h.secretKey))
+	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
 	hm.Write(id)
 	sign := hex.EncodeToString(append(id, hm.Sum(nil)...))
 
 	return &http.Cookie{
-			Name:  h.cookieAuthName,
+			Name:  h.Cfg.CookieAuthName,
 			Value: sign,
 		},
 		binary.BigEndian.Uint64(id),
@@ -169,7 +142,7 @@ func (h *Handler) generateAuthCookie() (*http.Cookie, uint64, error) {
 
 func (h *Handler) authMiddlewareHandler(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		cookie, err := r.Cookie(h.cookieAuthName)
+		cookie, err := r.Cookie(h.Cfg.CookieAuthName)
 		if err != nil && err != http.ErrNoCookie {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -226,7 +199,7 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 		ctx := r.Context()
 		userID, _ := ctx.Value(keyPrincipalID).(uint64)
 
-		result := h.Repo.GetUserURL(h.BaseURL, userID)
+		result := h.Repo.GetUserURL(h.Cfg.BaseURL, userID)
 
 		w.Header().Set("Content-Type", "application/json")
 
@@ -242,55 +215,11 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}
-
-		// if len(h.Repo.Items) == 0 {
-		// 	w.WriteHeader(http.StatusNoContent)
-		// 	w.Header().Set("Content-Type", "application/json")
-		// 	w.Write([]byte("[]"))
-		// 	return
-		// }
-
-		// result := []struct {
-		// 	ShortURL    string `json:"short_url"`
-		// 	OriginalURL string `json:"original_url"`
-		// }{}
-		// for k, v := range h.Repo.Items {
-		// 	result = append(result,
-		// 		struct {
-		// 			ShortURL    string `json:"short_url"`
-		// 			OriginalURL string `json:"original_url"`
-		// 		}{
-		// 			h.BaseURL + "/" + k,
-		// 			v,
-		// 		})
-		// }
-		// w.Header().Set("Content-Type", "application/json")
-		// w.WriteHeader(http.StatusOK)
-
-		// if err := json.NewEncoder(w).Encode(&result); err != nil {
-		// 	http.Error(w, "Something went wrong!", http.StatusBadRequest)
-		// 	return
-		// }
 	}
 }
 
 func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// var reader io.Reader
-		// if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-		// 	gz, err := gzip.NewReader(r.Body)
-		// 	if err != nil {
-		// 		http.Error(w, err.Error(), http.StatusBadRequest)
-		// 		return
-		// 	}
-		// 	reader = gz
-		// 	defer gz.Close()
-		// } else {
-		// 	reader = r.Body
-		// 	defer r.Body.Close()
-		// }
-
-		// bodyRaw, err := io.ReadAll(reader)
 		ctx := r.Context()
 		userID, _ := ctx.Value(keyPrincipalID).(uint64)
 
@@ -325,7 +254,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		responseValue := struct {
 			ResultValue string `json:"result"`
 		}{
-			ResultValue: h.BaseURL + "/" + requestValue,
+			ResultValue: h.Cfg.BaseURL + "/" + requestValue,
 		}
 		if err := json.NewEncoder(w).Encode(&responseValue); err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
@@ -336,21 +265,6 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// var reader io.Reader
-		// if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-		// 	gz, err := gzip.NewReader(r.Body)
-		// 	if err != nil {
-		// 		http.Error(w, err.Error(), http.StatusBadRequest)
-		// 		return
-		// 	}
-		// 	reader = gz
-		// 	defer gz.Close()
-		// } else {
-		// 	reader = r.Body
-		// 	defer r.Body.Close()
-		// }
-
-		// bodyRaw, err := io.ReadAll(reader)
 		ctx := r.Context()
 		userID, _ := ctx.Value(keyPrincipalID).(uint64)
 
@@ -379,7 +293,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusCreated)
-		_, err = w.Write([]byte(h.BaseURL + "/" + requestValue))
+		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
