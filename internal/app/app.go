@@ -11,7 +11,7 @@ import (
 
 func Run() error {
 	// Env configuration
-	var cfg handlers.Config
+	var cfg *handlers.Config
 	err := env.Parse(&cfg)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func Run() error {
 	//HTTP Server
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(dictionary, cfg.BaseURL, cfg.SecretKey, cfg.CookieAuthName),
+		Handler: handlers.URLHandler(dictionary, cfg),
 	}
 
 	// start server

@@ -56,13 +56,14 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 // 	"image/svg+xml",
 // }
 
-func URLHandler(repo *storage.Dictionary, baseURL string, secretKey string, cookieAuthName string) *Handler {
+//func URLHandler(repo *storage.Dictionary, baseURL string, secretKey string, cookieAuthName string) *Handler {
+func URLHandler(repo *storage.Dictionary, cfg *Config) *Handler {
 	h := &Handler{
 		Mux:            chi.NewMux(),
 		Repo:           *repo,
-		BaseURL:        baseURL,
-		secretKey:      secretKey,
-		cookieAuthName: cookieAuthName,
+		BaseURL:        cfg.BaseURL,
+		secretKey:      cfg.SecretKey,
+		cookieAuthName: cfg.CookieAuthName,
 	}
 
 	h.Mux.Use(h.authMiddlewareHandler)

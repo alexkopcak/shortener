@@ -293,7 +293,11 @@ func TestURLHandler(t *testing.T) {
 			require.NoError(t, err)
 			d.Items = tt.repo.Items
 			h := http.Server{
-				Handler: URLHandler(d, baseURL, secretKey, cookieAuthName),
+				Handler: URLHandler(d, &Config{
+					BaseURL:        baseURL,
+					SecretKey:      secretKey,
+					CookieAuthName: cookieAuthName,
+				}),
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
@@ -326,7 +330,11 @@ func TestURLHandler(t *testing.T) {
 				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
 				w2 := httptest.NewRecorder()
 				h2 := http.Server{
-					Handler: URLHandler(d, baseURL, secretKey, cookieAuthName),
+					Handler: URLHandler(d, &Config{
+						BaseURL:        baseURL,
+						SecretKey:      secretKey,
+						CookieAuthName: cookieAuthName,
+					}),
 				}
 				h2.Handler.ServeHTTP(w2, request2)
 				result2 := w2.Result()
@@ -364,7 +372,11 @@ func TestCookie(t *testing.T) {
 			d, err := storage.NewDictionary("")
 			require.NoError(t, err)
 			h := http.Server{
-				Handler: URLHandler(d, baseURL, secretKey, cookieAuthName),
+				Handler: URLHandler(d, &Config{
+					BaseURL:        baseURL,
+					SecretKey:      secretKey,
+					CookieAuthName: cookieAuthName,
+				}),
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
