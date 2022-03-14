@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
@@ -84,16 +85,16 @@ func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
 func (h *Handler) GetPing(cfg Config) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if cfg.DB != nil {
-			if cfg.DB.Ping() != nil {
-				w.WriteHeader(http.StatusOK)
-				return
-			}
-			// ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
-			// defer cancel()
-			// if cfg.DB.PingContext(ctx) != nil {
+			// if cfg.DB.Ping() != nil {
 			// 	w.WriteHeader(http.StatusOK)
 			// 	return
 			// }
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			if cfg.DB.PingContext(ctx) != nil {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 		}
 		w.WriteHeader(http.StatusInternalServerError)
 	})
