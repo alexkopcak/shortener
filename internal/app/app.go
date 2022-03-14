@@ -11,7 +11,7 @@ import (
 
 func Run() error {
 	// Env configuration
-	var cfg config
+	var cfg handlers.Config
 	err := env.Parse(&cfg)
 	if err != nil {
 		return err
