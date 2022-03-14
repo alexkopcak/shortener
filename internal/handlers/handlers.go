@@ -57,7 +57,7 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 // }
 
 //func URLHandler(repo *storage.Dictionary, baseURL string, secretKey string, cookieAuthName string) *Handler {
-func URLHandler(repo *storage.Dictionary, cfg *Config) *Handler {
+func URLHandler(repo *storage.Dictionary, cfg Config) *Handler {
 	h := &Handler{
 		Mux:            chi.NewMux(),
 		Repo:           *repo,
