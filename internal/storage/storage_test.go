@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"testing"
 
@@ -129,12 +128,12 @@ func TestDictionary_GetUserURL(t *testing.T) {
 	type fields struct {
 		MinShortURLLength int
 		Items             map[string]string
-		UserItems         map[int][]string
+		UserItems         map[int32][]string
 		fileStoragePath   string
 	}
 	type args struct {
 		prefix string
-		userID int
+		userID int32
 	}
 	tests := []struct {
 		name   string
@@ -147,7 +146,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 			fields: fields{
 				MinShortURLLength: 5,
 				Items:             map[string]string{},
-				UserItems:         map[int][]string{},
+				UserItems:         map[int32][]string{},
 				fileStoragePath:   "",
 			},
 			args: args{
@@ -165,7 +164,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 					"shortURL2": "http://longURL2",
 					"shortURL3": "http://longURL3",
 				},
-				UserItems: map[int][]string{
+				UserItems: map[int32][]string{
 					3: {"shortURL1"},
 				},
 				fileStoragePath: "",
@@ -190,7 +189,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 				fileStoragePath: tt.fields.fileStoragePath,
 			}
 			ctx := context.Background()
-			fmt.Printf("%v\n", *d)
+			//fmt.Printf("%v\n", *d)
 			if got := d.GetUserURL(ctx, tt.args.prefix, tt.args.userID); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Dictionary.GetUserURL() = %v, want %v", got, tt.want)
 			}

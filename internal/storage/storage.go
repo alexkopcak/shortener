@@ -18,9 +18,9 @@ const (
 )
 
 type Storage interface {
-	AddURL(ctx context.Context, longURLValue string, userID int) (string, error)
+	AddURL(ctx context.Context, longURLValue string, userID int32) (string, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
-	GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType
+	GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType
 	Ping(ctx context.Context) error
 }
 
@@ -78,7 +78,7 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int) (string, error) {
+func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
 	}
@@ -101,7 +101,7 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 	return longURL, nil
 }
 
-func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType {
+func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType {
 	result := []UserExportType{}
 	rows, err := ps.db.Query(ctx, "SELECT short_url, original_url FROM shortener WHERE user_id = $1", userID)
 	if err != nil {
@@ -138,13 +138,13 @@ func (ps *PostgresStorage) Ping(ctx context.Context) error {
 
 type Dictionary struct {
 	Items           map[string]string
-	UserItems       map[int][]string
+	UserItems       map[int32][]string
 	fileStoragePath string
 }
 
 func NewDictionary(cfg config.Config) (Storage, error) {
 	items := make(map[string]string)
-	userItems := make(map[int][]string)
+	userItems := make(map[int32][]string)
 
 	_, err := os.Stat(cfg.FileStoragePath)
 	if err == nil {
@@ -172,7 +172,7 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int) (string, error) {
+func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
 	}
@@ -198,7 +198,7 @@ func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, 
 	return d.Items[shortURLValue], nil
 }
 
-func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType {
+func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType {
 	result := []UserExportType{}
 	for _, v := range d.UserItems[userID] {
 		longURL, err := d.GetURL(ctx, v)

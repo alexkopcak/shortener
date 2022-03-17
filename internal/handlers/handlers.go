@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"crypto/hmac"
@@ -9,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -99,17 +101,27 @@ func gzipMiddlewareHandle(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int, error) {
+func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int32, error) {
 	if cookie == nil {
 		return 0, http.ErrNoCookie
 	}
 
 	data, err := hex.DecodeString(cookie.Value)
+	//	fmt.Printf("err %v\n", err)
 	if err != nil {
 		return 0, err
 	}
 
-	id := int(binary.BigEndian.Uint32(data[:4]))
+	//	fmt.Printf("data[:4] %v\n", data)
+
+	//id := int(binary.BigEndian.Uint32(data[:4]))
+	var id int32
+	err = binary.Read(bytes.NewReader(data[:4]), binary.BigEndian, &id)
+	if err != nil {
+		fmt.Printf("%v\n", err)
+
+		return 0, err
+	}
 
 	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
 	hm.Write(data[:4])
@@ -120,7 +132,7 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int, error) {
 	return 0, http.ErrNoCookie
 }
 
-func (h *Handler) generateAuthCookie() (*http.Cookie, int, error) {
+func (h *Handler) generateAuthCookie() (*http.Cookie, int32, error) {
 	id := make([]byte, 4)
 
 	_, err := rand.Read(id)
@@ -132,12 +144,16 @@ func (h *Handler) generateAuthCookie() (*http.Cookie, int, error) {
 	hm.Write(id)
 	sign := hex.EncodeToString(append(id, hm.Sum(nil)...))
 
+	var result int32
+	err = binary.Read(bytes.NewReader(id), binary.BigEndian, &result)
+	//	fmt.Printf("%v\n", err)
+
 	return &http.Cookie{
 			Name:  h.Cfg.CookieAuthName,
 			Value: sign,
 		},
-		int(binary.BigEndian.Uint32(id)),
-		nil
+		result,
+		err
 }
 
 func (h *Handler) authMiddlewareHandler(next http.Handler) http.Handler {
@@ -147,9 +163,12 @@ func (h *Handler) authMiddlewareHandler(next http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		//		fmt.Println("auth middle ware")
 		id, err := h.decodeAuthCookie(cookie)
+		//		fmt.Printf("id: %v err: %v\n", id, err)
 		if err != nil {
 			cookie, id, err = h.generateAuthCookie()
+			//			fmt.Printf("cookie: %v id: %v err: %v\n", cookie, id, err)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -197,7 +216,7 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(int)
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
 
 		result := h.Repo.GetUserURL(r.Context(), h.Cfg.BaseURL, userID)
 
@@ -221,7 +240,7 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(int)
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
 
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
@@ -266,7 +285,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(int)
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
 
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
@@ -285,6 +304,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 			return
 		}
 
+		//		fmt.Printf("userID: %v\n", userID)
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)

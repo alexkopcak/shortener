@@ -388,6 +388,7 @@ func TestCookie(t *testing.T) {
 					CookieAuthName: cookieAuthName,
 				}),
 			}
+			//fmt.Printf("request %v\n", request)
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
 			require.NotEmpty(t, result.Cookies(), "cookies field are empty")
