@@ -65,7 +65,7 @@ func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
 
 func (h *Handler) Ping() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.Repo.Ping() == nil {
+		if h.Repo.Ping(r.Context()) == nil {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
@@ -99,7 +99,7 @@ func gzipMiddlewareHandle(next http.Handler) http.Handler {
 	})
 }
 
-func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (uint64, error) {
+func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int, error) {
 	if cookie == nil {
 		return 0, http.ErrNoCookie
 	}
@@ -109,19 +109,19 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (uint64, error) {
 		return 0, err
 	}
 
-	id := binary.BigEndian.Uint64(data[:8])
+	id := int(binary.BigEndian.Uint32(data[:4]))
 
 	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
-	hm.Write(data[:8])
+	hm.Write(data[:4])
 	sign := hm.Sum(nil)
-	if hmac.Equal(data[8:], sign) {
+	if hmac.Equal(data[4:], sign) {
 		return id, nil
 	}
 	return 0, http.ErrNoCookie
 }
 
-func (h *Handler) generateAuthCookie() (*http.Cookie, uint64, error) {
-	id := make([]byte, 8)
+func (h *Handler) generateAuthCookie() (*http.Cookie, int, error) {
+	id := make([]byte, 4)
 
 	_, err := rand.Read(id)
 	if err != nil {
@@ -136,7 +136,7 @@ func (h *Handler) generateAuthCookie() (*http.Cookie, uint64, error) {
 			Name:  h.Cfg.CookieAuthName,
 			Value: sign,
 		},
-		binary.BigEndian.Uint64(id),
+		int(binary.BigEndian.Uint32(id)),
 		nil
 }
 
@@ -180,7 +180,7 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-		longURLValue, err := h.Repo.GetURL(idValue)
+		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -197,9 +197,9 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(uint64)
+		userID, _ := ctx.Value(keyPrincipalID).(int)
 
-		result := h.Repo.GetUserURL(h.Cfg.BaseURL, userID)
+		result := h.Repo.GetUserURL(r.Context(), h.Cfg.BaseURL, userID)
 
 		w.Header().Set("Content-Type", "application/json")
 
@@ -221,7 +221,7 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(uint64)
+		userID, _ := ctx.Value(keyPrincipalID).(int)
 
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
@@ -243,7 +243,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -266,7 +266,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		userID, _ := ctx.Value(keyPrincipalID).(uint64)
+		userID, _ := ctx.Value(keyPrincipalID).(int)
 
 		bodyRaw, err := io.ReadAll(r.Body)
 		if err != nil || len(bodyRaw) == 0 {
@@ -285,7 +285,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

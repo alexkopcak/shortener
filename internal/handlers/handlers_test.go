@@ -296,9 +296,10 @@ func TestURLHandler(t *testing.T) {
 
 			//d := storage.Dictionary
 			//d.Items = tt.repo.Items
+
 			if len(tt.repo.Items) > 0 {
 				for _, v := range tt.repo.Items {
-					d.AddURL(v, 0)
+					d.AddURL(request.Context(), v, 0)
 				}
 			}
 			h := http.Server{

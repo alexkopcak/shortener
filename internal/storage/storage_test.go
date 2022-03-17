@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"testing"
@@ -43,13 +44,14 @@ func TestDictionary_AddURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d, err := NewDictionary(config.Config{})
 			require.NoError(t, err)
-			got, err := d.AddURL(tt.longURLValue, 0)
+			ctx := context.Background()
+			got, err := d.AddURL(ctx, tt.longURLValue, 0)
 			if tt.err {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
-				longValue, err := d.GetURL(got)
+				longValue, err := d.GetURL(ctx, got)
 				require.NoError(t, err)
 				assert.Equal(t, longValue, tt.longURLValue)
 			}
@@ -85,7 +87,8 @@ func TestDictionary_GetURL(t *testing.T) {
 			d := &Dictionary{
 				Items: tt.fields.Items,
 			}
-			if got, _ := d.GetURL(tt.args.shortURLValue); got != tt.want {
+			ctx := context.Background()
+			if got, _ := d.GetURL(ctx, tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})
@@ -126,12 +129,12 @@ func TestDictionary_GetUserURL(t *testing.T) {
 	type fields struct {
 		MinShortURLLength int
 		Items             map[string]string
-		UserItems         map[uint64][]string
+		UserItems         map[int][]string
 		fileStoragePath   string
 	}
 	type args struct {
 		prefix string
-		userID uint64
+		userID int
 	}
 	tests := []struct {
 		name   string
@@ -144,7 +147,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 			fields: fields{
 				MinShortURLLength: 5,
 				Items:             map[string]string{},
-				UserItems:         map[uint64][]string{},
+				UserItems:         map[int][]string{},
 				fileStoragePath:   "",
 			},
 			args: args{
@@ -162,7 +165,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 					"shortURL2": "http://longURL2",
 					"shortURL3": "http://longURL3",
 				},
-				UserItems: map[uint64][]string{
+				UserItems: map[int][]string{
 					3: {"shortURL1"},
 				},
 				fileStoragePath: "",
@@ -186,8 +189,9 @@ func TestDictionary_GetUserURL(t *testing.T) {
 				UserItems:       tt.fields.UserItems,
 				fileStoragePath: tt.fields.fileStoragePath,
 			}
+			ctx := context.Background()
 			fmt.Printf("%v\n", *d)
-			if got := d.GetUserURL(tt.args.prefix, tt.args.userID); !reflect.DeepEqual(got, tt.want) {
+			if got := d.GetUserURL(ctx, tt.args.prefix, tt.args.userID); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Dictionary.GetUserURL() = %v, want %v", got, tt.want)
 			}
 		})

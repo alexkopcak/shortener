@@ -3,8 +3,8 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
-	"time"
 
 	"os"
 	"strings"
@@ -18,17 +18,19 @@ const (
 )
 
 type Storage interface {
-	AddURL(longURLValue string, userID uint64) (string, error)
-	GetURL(shortURLValue string) (string, error)
-	GetUserURL(prefix string, userID uint64) []UserExportType
-	Ping() error
+	AddURL(ctx context.Context, longURLValue string, userID int) (string, error)
+	GetURL(ctx context.Context, shortURLValue string) (string, error)
+	GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType
+	Ping(ctx context.Context) error
 }
 
 func InitializeStorage(cfg config.Config) (Storage, error) {
+	fmt.Println("initialize storage")
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
-		return NewPostgresStorage(cfg)
-	} else {
 		return NewDictionary(cfg)
+	} else {
+		fmt.Println("use db")
+		return NewPostgresStorage(cfg)
 	}
 }
 
@@ -38,14 +40,37 @@ type PostgresStorage struct {
 
 func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
+	fmt.Println("connect to db")
 	if err != nil {
+		fmt.Println("error", err.Error())
 		return NewDictionary(cfg)
 	}
-	defer ps.Close(context.Background())
+	// defer ps.Close(context.Background())
 
-	_, err = ps.Exec(context.Background(), "CREATE TABLE IF NOT EXSISTS shortener (user_id BIGINT short_url VARCHAR(5) original_url VARCHAR(255));")
+	var cnt int
+	err = ps.QueryRow(context.Background(), "SELECT COUNT(*) FROM pg_database WHERE datname = 'shortener_db';").Scan(&cnt)
+
+	if cnt != 1 || err != nil {
+		fmt.Println("create db")
+		_, err = ps.Exec(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
+		if err != nil {
+			fmt.Println("can't create db")
+			fmt.Printf("%v\n", err)
+			return NewDictionary(cfg)
+		}
+	}
+
+	_, err = ps.Exec(context.Background(), "SELECT * FROM shortener LIMIT 1;")
+	fmt.Println("table exsist?")
 	if err != nil {
-		return NewDictionary(cfg)
+		fmt.Printf("%v\n", err)
+		fmt.Println("create table")
+		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255));")
+		if err != nil {
+			fmt.Println("create table error", err.Error())
+			fmt.Printf("%v", err)
+			return NewDictionary(cfg)
+		}
 	}
 
 	return &PostgresStorage{
@@ -53,31 +78,32 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (ps *PostgresStorage) AddURL(longURLValue string, userID uint64) (string, error) {
+func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
-	_, err := ps.db.Exec(context.Background(), "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3)", userID, shortURLvalue, longURLValue)
+	_, err := ps.db.Exec(ctx, "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3)", userID, shortURLvalue, longURLValue)
 	if err != nil {
+		fmt.Printf("%v\n", err)
 		return "", err
 	}
 	return shortURLvalue, nil
 }
 
-func (ps *PostgresStorage) GetURL(shortURLValue string) (string, error) {
+func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
-	err := ps.db.QueryRow(context.Background(), "SELECT original_url FROM shortener WHERE short_url = $1", shortURLValue).Scan(&longURL)
+	err := ps.db.QueryRow(ctx, "SELECT original_url FROM shortener WHERE short_url = $1", shortURLValue).Scan(&longURL)
 	if err != nil {
 		return "", err
 	}
 	return longURL, nil
 }
 
-func (ps *PostgresStorage) GetUserURL(prefix string, userID uint64) []UserExportType {
+func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType {
 	result := []UserExportType{}
-	rows, err := ps.db.Query(context.Background(), "SELECT short_url, original_url FROM shortener WHERE user_id = $1", userID)
+	rows, err := ps.db.Query(ctx, "SELECT short_url, original_url FROM shortener WHERE user_id = $1", userID)
 	if err != nil {
 		return result
 	}
@@ -101,12 +127,10 @@ func (ps *PostgresStorage) GetUserURL(prefix string, userID uint64) []UserExport
 	return result
 }
 
-func (ps *PostgresStorage) Ping() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
+func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	err := ps.db.Ping(ctx)
 	if err != nil {
+		fmt.Printf("%v\n", err)
 		return err
 	}
 	return err
@@ -114,13 +138,13 @@ func (ps *PostgresStorage) Ping() error {
 
 type Dictionary struct {
 	Items           map[string]string
-	UserItems       map[uint64][]string
+	UserItems       map[int][]string
 	fileStoragePath string
 }
 
 func NewDictionary(cfg config.Config) (Storage, error) {
 	items := make(map[string]string)
-	userItems := make(map[uint64][]string)
+	userItems := make(map[int][]string)
 
 	_, err := os.Stat(cfg.FileStoragePath)
 	if err == nil {
@@ -148,7 +172,7 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (d *Dictionary) AddURL(longURLValue string, userID uint64) (string, error) {
+func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
 	}
@@ -167,17 +191,17 @@ func (d *Dictionary) AddURL(longURLValue string, userID uint64) (string, error) 
 	return shortURLvalue, nil
 }
 
-func (d *Dictionary) GetURL(shortURLValue string) (string, error) {
+func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	if strings.TrimSpace(shortURLValue) == "" {
 		return "", errors.New("empty short URL value")
 	}
 	return d.Items[shortURLValue], nil
 }
 
-func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
+func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int) []UserExportType {
 	result := []UserExportType{}
 	for _, v := range d.UserItems[userID] {
-		longURL, err := d.GetURL(v)
+		longURL, err := d.GetURL(ctx, v)
 
 		item := UserExportType{}
 		if err != nil {
@@ -197,6 +221,6 @@ func (d *Dictionary) GetUserURL(prefix string, userID uint64) []UserExportType {
 	return result
 }
 
-func (d *Dictionary) Ping() error {
+func (d *Dictionary) Ping(ctx context.Context) error {
 	return nil
 }
