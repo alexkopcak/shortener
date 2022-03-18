@@ -30,7 +30,7 @@ func shortURLGenerator(n int) string {
 }
 
 type Storage interface {
-	AddURL(ctx context.Context, longURLValue string, userID int32) (string, error)
+	AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
@@ -91,9 +91,10 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
+func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error) {
+	duplicate := false
 	if strings.TrimSpace(longURLValue) == "" {
-		return "", errors.New("empty long URL value")
+		return "", duplicate, errors.New("empty long URL value")
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
@@ -106,7 +107,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 		shortURLvalue,
 		longURLValue)
 	if err != nil {
-		return "", err
+		return "", duplicate, err
 	}
 
 	if cTag.RowsAffected() == 0 {
@@ -118,11 +119,12 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 			userID, longURLValue).Scan(&shortURL)
 
 		if err != nil {
-			return "", err
+			return "", duplicate, err
 		}
 		shortURLvalue = shortURL
+		duplicate = true
 	}
-	return shortURLvalue, nil
+	return shortURLvalue, duplicate, nil
 }
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
@@ -253,9 +255,9 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
+func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error) {
 	if strings.TrimSpace(longURLValue) == "" {
-		return "", errors.New("empty long URL value")
+		return "", false, errors.New("empty long URL value")
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
@@ -266,10 +268,10 @@ func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int
 		ShortURLValue: shortURLvalue,
 		LongURLValue:  longURLValue,
 	}); err != nil {
-		return "", err
+		return "", false, err
 	}
 
-	return shortURLvalue, nil
+	return shortURLvalue, false, nil
 }
 
 func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, error) {

@@ -46,7 +46,7 @@ func TestDictionary_AddURL(t *testing.T) {
 			d, err := NewDictionary(config.Config{})
 			require.NoError(t, err)
 			ctx := context.Background()
-			got, err := d.AddURL(ctx, tt.longURLValue, 0)
+			got, _, err := d.AddURL(ctx, tt.longURLValue, 0)
 			if tt.err {
 				require.Error(t, err)
 			} else {

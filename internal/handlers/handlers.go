@@ -299,13 +299,17 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		if duplicate {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 
 		responseValue := struct {
 			ResultValue string `json:"result"`
@@ -342,14 +346,18 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		}
 
 		//		fmt.Printf("userID: %v\n", userID)
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusCreated)
+		if duplicate {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
