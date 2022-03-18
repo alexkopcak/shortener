@@ -1,10 +1,5 @@
 package storage
 
-import (
-	"math/rand"
-	"time"
-)
-
 type (
 	ItemType struct {
 		ShortURLValue string `json:"shortURLValue"`
@@ -15,14 +10,18 @@ type (
 		ShortURL    string `json:"short_url"`
 		OriginalURL string `json:"original_url"`
 	}
-)
 
-func shortURLGenerator(n int) string {
-	rand.Seed(time.Now().UnixNano())
-	var letterRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
-	b := make([]rune, n)
-	for i := range b {
-		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	BatchRequestArray []BatchRequest
+
+	BatchRequest struct {
+		CorrelationId string `json:"correlation_id"`
+		OriginalURL   string `json:"original_url"`
 	}
-	return string(b)
-}
+
+	BatchResponseArray []BatchResponse
+
+	BatchResponse struct {
+		CorrelationId string `json:"correlation_id"`
+		ShortURL      string `json:"short_url"`
+	}
+)

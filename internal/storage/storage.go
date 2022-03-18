@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
+	"time"
 
 	"os"
 	"strings"
@@ -15,12 +17,24 @@ import (
 
 const (
 	minShortURLLengthConst = 5
+	insertSatement         = "insert statement"
 )
+
+func shortURLGenerator(n int) string {
+	rand.Seed(time.Now().UnixNano())
+	var letterRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = letterRunes[rand.Intn(len(letterRunes))]
+	}
+	return string(b)
+}
 
 type Storage interface {
 	AddURL(ctx context.Context, longURLValue string, userID int32) (string, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
-	GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType
+	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
+	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
 }
 
@@ -84,7 +98,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
-	_, err := ps.db.Exec(ctx, "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3)", userID, shortURLvalue, longURLValue)
+	_, err := ps.db.Exec(ctx, "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3) ;", userID, shortURLvalue, longURLValue)
 	if err != nil {
 		fmt.Printf("%v\n", err)
 		return "", err
@@ -94,18 +108,18 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
-	err := ps.db.QueryRow(ctx, "SELECT original_url FROM shortener WHERE short_url = $1", shortURLValue).Scan(&longURL)
+	err := ps.db.QueryRow(ctx, "SELECT original_url FROM shortener WHERE short_url = $1 ;", shortURLValue).Scan(&longURL)
 	if err != nil {
 		return "", err
 	}
 	return longURL, nil
 }
 
-func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType {
+func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
-	rows, err := ps.db.Query(ctx, "SELECT short_url, original_url FROM shortener WHERE user_id = $1", userID)
+	rows, err := ps.db.Query(ctx, "SELECT short_url, original_url FROM shortener WHERE user_id = $1 ;", userID)
 	if err != nil {
-		return result
+		return result, err
 	}
 	defer rows.Close()
 
@@ -124,7 +138,47 @@ func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID
 		}
 		result = append(result, item)
 	}
-	return result
+	return result, nil
+}
+
+func (ps *PostgresStorage) PostAPIBatch(ctx context.Context, items *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error) {
+	result := &BatchResponseArray{}
+	if ps.db == nil {
+		return result, errors.New("db is nil")
+	}
+
+	tx, err := ps.db.Begin(ctx)
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback(ctx)
+
+	for _, v := range *items {
+		batchResponseItem := BatchResponse{}
+		batchResponseItem.CorrelationId = v.CorrelationId
+		shortURLValue := shortURLGenerator(minShortURLLengthConst)
+
+		batchResponseItem.ShortURL = shortURLValue
+		if strings.TrimSpace(prefix) != "" {
+			batchResponseItem.ShortURL = prefix + "/" + shortURLValue
+		}
+
+		_, err := tx.Exec(ctx,
+			"INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3);",
+			userID,
+			shortURLValue,
+			v.OriginalURL,
+		)
+		if err != nil {
+			return &BatchResponseArray{}, err
+		}
+		*result = append(*result, batchResponseItem)
+	}
+	err = tx.Commit(ctx)
+	if err != nil {
+		return &BatchResponseArray{}, err
+	}
+	return result, nil
 }
 
 func (ps *PostgresStorage) Ping(ctx context.Context) error {
@@ -198,7 +252,7 @@ func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, 
 	return d.Items[shortURLValue], nil
 }
 
-func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32) []UserExportType {
+func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
 	for _, v := range d.UserItems[userID] {
 		longURL, err := d.GetURL(ctx, v)
@@ -218,7 +272,33 @@ func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32
 		}
 		result = append(result, item)
 	}
-	return result
+	return result, nil
+}
+
+func (d *Dictionary) PostAPIBatch(ctx context.Context, items *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error) {
+	result := &BatchResponseArray{}
+	for _, v := range *items {
+		batchResponseItem := BatchResponse{}
+		batchResponseItem.CorrelationId = v.CorrelationId
+		shortURLValue := shortURLGenerator(minShortURLLengthConst)
+
+		batchResponseItem.ShortURL = shortURLValue
+		if strings.TrimSpace(prefix) != "" {
+			batchResponseItem.ShortURL = prefix + "/" + shortURLValue
+		}
+
+		d.Items[shortURLValue] = v.OriginalURL
+		d.UserItems[userID] = append(d.UserItems[userID], shortURLValue)
+
+		if err := ProducerWrite(d.fileStoragePath, &ItemType{
+			ShortURLValue: shortURLValue,
+			LongURLValue:  v.OriginalURL,
+		}); err != nil {
+			return nil, err
+		}
+		*result = append(*result, batchResponseItem)
+	}
+	return result, nil
 }
 
 func (d *Dictionary) Ping(ctx context.Context) error {

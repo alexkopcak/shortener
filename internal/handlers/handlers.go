@@ -59,6 +59,7 @@ func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
 	h.Mux.Get("/ping", h.Ping())
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
+	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
@@ -218,7 +219,11 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 		ctx := r.Context()
 		userID, _ := ctx.Value(keyPrincipalID).(int32)
 
-		result := h.Repo.GetUserURL(r.Context(), h.Cfg.BaseURL, userID)
+		result, err := h.Repo.GetUserURL(r.Context(), h.Cfg.BaseURL, userID)
+		if err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
 
 		w.Header().Set("Content-Type", "application/json")
 
@@ -231,6 +236,39 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 		}
 
 		if err := json.NewEncoder(w).Encode(&result); err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+func (h *Handler) PostAPIBatchHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
+
+		bodyRaw, err := io.ReadAll(r.Body)
+		if err != nil || len(bodyRaw) == 0 {
+			http.Error(w, "Body are not contain URL!", http.StatusBadRequest)
+			return
+		}
+
+		batchRequest := &storage.BatchRequestArray{}
+
+		if err := json.Unmarshal(bodyRaw, batchRequest); err != nil {
+			http.Error(w, "Bad request!", http.StatusBadRequest)
+			return
+		}
+
+		responseValue, err := h.Repo.PostAPIBatch(ctx, batchRequest, h.Cfg.BaseURL, userID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+
+		if err := json.NewEncoder(w).Encode(&responseValue); err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}

@@ -190,7 +190,9 @@ func TestDictionary_GetUserURL(t *testing.T) {
 			}
 			ctx := context.Background()
 			//fmt.Printf("%v\n", *d)
-			if got := d.GetUserURL(ctx, tt.args.prefix, tt.args.userID); !reflect.DeepEqual(got, tt.want) {
+			got, err := d.GetUserURL(ctx, tt.args.prefix, tt.args.userID)
+			require.NoError(t, err)
+			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("Dictionary.GetUserURL() = %v, want %v", got, tt.want)
 			}
 		})
