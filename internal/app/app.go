@@ -2,7 +2,6 @@ package app
 
 import (
 	"flag"
-	"fmt"
 	"net/http"
 
 	"github.com/alexkopcak/shortener/internal/config"
@@ -31,7 +30,7 @@ func Run() error {
 
 	//cfg.DBConnectionString = ""
 	// Repository
-	fmt.Println("db connection:", cfg.DBConnectionString)
+	//fmt.Println("db connection:", cfg.DBConnectionString)
 	repository, err := storage.InitializeStorage(cfg)
 	if err != nil {
 		return err

@@ -3,7 +3,6 @@ package storage
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -39,11 +38,11 @@ type Storage interface {
 }
 
 func InitializeStorage(cfg config.Config) (Storage, error) {
-	fmt.Println("initialize storage")
+	//	fmt.Println("initialize storage")
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
 		return NewDictionary(cfg)
 	} else {
-		fmt.Println("use db")
+		//		fmt.Println("use db")
 		return NewPostgresStorage(cfg)
 	}
 }
@@ -54,9 +53,9 @@ type PostgresStorage struct {
 
 func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
-	fmt.Println("connect to db")
+	//fmt.Println("connect to db")
 	if err != nil {
-		fmt.Println("error", err.Error())
+		//fmt.Println("error", err.Error())
 		return NewDictionary(cfg)
 	}
 	// defer ps.Close(context.Background())
@@ -65,24 +64,24 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	err = ps.QueryRow(context.Background(), "SELECT COUNT(*) FROM pg_database WHERE datname = 'shortener_db';").Scan(&cnt)
 
 	if cnt != 1 || err != nil {
-		fmt.Println("create db")
+		//fmt.Println("create db")
 		_, err = ps.Exec(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
 		if err != nil {
-			fmt.Println("can't create db")
-			fmt.Printf("%v\n", err)
+			//fmt.Println("can't create db")
+			//fmt.Printf("%v\n", err)
 			return NewDictionary(cfg)
 		}
 	}
 
 	_, err = ps.Exec(context.Background(), "SELECT * FROM shortener LIMIT 1;")
-	fmt.Println("table exsist?")
+	//fmt.Println("table exsist?")
 	if err != nil {
-		fmt.Printf("%v\n", err)
-		fmt.Println("create table")
-		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255));")
+		//fmt.Printf("%v\n", err)
+		//fmt.Println("create table")
+		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), UNIQUE(user_id, original_url));")
 		if err != nil {
-			fmt.Println("create table error", err.Error())
-			fmt.Printf("%v", err)
+			//fmt.Println("create table error", err.Error())
+			//fmt.Printf("%v", err)
 			return NewDictionary(cfg)
 		}
 	}
@@ -98,26 +97,54 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
-	_, err := ps.db.Exec(ctx, "INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3) ;", userID, shortURLvalue, longURLValue)
+	cTag, err := ps.db.Exec(ctx,
+		"INSERT INTO shortener "+
+			"(user_id, short_url, original_url) "+
+			"VALUES ($1, $2, $3) "+
+			"ON CONFLICT (user_id, original_url) DO NOTHING;",
+		userID,
+		shortURLvalue,
+		longURLValue)
 	if err != nil {
-		fmt.Printf("%v\n", err)
 		return "", err
+	}
+
+	if cTag.RowsAffected() == 0 {
+		var shortURL string
+		err = ps.db.QueryRow(ctx,
+			"SELECT short_url "+
+				"FROM shortener "+
+				"WHERE user_id = $1 AND original_url = $2 ;",
+			userID, longURLValue).Scan(&shortURL)
+
+		if err != nil {
+			return "", err
+		}
+		shortURLvalue = shortURL
 	}
 	return shortURLvalue, nil
 }
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
-	err := ps.db.QueryRow(ctx, "SELECT original_url FROM shortener WHERE short_url = $1 ;", shortURLValue).Scan(&longURL)
+	err := ps.db.QueryRow(ctx,
+		"SELECT original_url "+
+			"FROM shortener "+
+			"WHERE short_url = $1 ;",
+		shortURLValue).Scan(&longURL)
 	if err != nil {
-		return "", err
+		return "l", err
 	}
 	return longURL, nil
 }
 
 func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
-	rows, err := ps.db.Query(ctx, "SELECT short_url, original_url FROM shortener WHERE user_id = $1 ;", userID)
+	rows, err := ps.db.Query(ctx,
+		"SELECT short_url, original_url "+
+			"FROM shortener "+
+			"WHERE user_id = $1 ;",
+		userID)
 	if err != nil {
 		return result, err
 	}
@@ -184,7 +211,7 @@ func (ps *PostgresStorage) PostAPIBatch(ctx context.Context, items *BatchRequest
 func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	err := ps.db.Ping(ctx)
 	if err != nil {
-		fmt.Printf("%v\n", err)
+		//fmt.Printf("%v\n", err)
 		return err
 	}
 	return err

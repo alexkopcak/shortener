@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -119,7 +118,7 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int32, error) {
 	var id int32
 	err = binary.Read(bytes.NewReader(data[:4]), binary.BigEndian, &id)
 	if err != nil {
-		fmt.Printf("%v\n", err)
+		//		fmt.Printf("%v\n", err)
 
 		return 0, err
 	}
