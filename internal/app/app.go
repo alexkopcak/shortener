@@ -29,7 +29,7 @@ func Run() error {
 	cfg.FileStoragePath = *fileStoragePathPointer
 	cfg.DBConnectionString = *dbConnectionString
 
-	cfg.DBConnectionString = ""
+	//cfg.DBConnectionString = ""
 	// Repository
 	fmt.Println("db connection:", cfg.DBConnectionString)
 	repository, err := storage.InitializeStorage(cfg)

@@ -155,7 +155,7 @@ func (ps *PostgresStorage) PostAPIBatch(ctx context.Context, items *BatchRequest
 
 	for _, v := range *items {
 		batchResponseItem := BatchResponse{}
-		batchResponseItem.CorrelationId = v.CorrelationId
+		batchResponseItem.CorrelationID = v.CorrelationID
 		shortURLValue := shortURLGenerator(minShortURLLengthConst)
 
 		batchResponseItem.ShortURL = shortURLValue
@@ -279,7 +279,7 @@ func (d *Dictionary) PostAPIBatch(ctx context.Context, items *BatchRequestArray,
 	result := &BatchResponseArray{}
 	for _, v := range *items {
 		batchResponseItem := BatchResponse{}
-		batchResponseItem.CorrelationId = v.CorrelationId
+		batchResponseItem.CorrelationID = v.CorrelationID
 		shortURLValue := shortURLGenerator(minShortURLLengthConst)
 
 		batchResponseItem.ShortURL = shortURLValue
