@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -230,8 +231,9 @@ func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, shortURLValues []s
 		return err
 	}
 
-	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted = TRUE WHERE user_id = $1 and short_url = ANY($2)", userID, idsArray)
+	fmt.Println(idsArray, userID)
 
+	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted = TRUE WHERE user_id = $1 and short_url = ANY($2);", userID, idsArray)
 	return err
 }
 

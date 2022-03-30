@@ -284,6 +284,19 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
+		{
+			name:     "delete URL",
+			target:   baseURL + "/api/user/urls",
+			template: "[\"%s\"]",
+			body:     "abc",
+			method:   http.MethodDelete,
+			repo:     storage.Dictionary{},
+			want: want{
+				statusCode: http.StatusAccepted,
+				body:       "",
+				location:   "",
+			},
+		},
 	}
 
 	for _, tt := range tests {

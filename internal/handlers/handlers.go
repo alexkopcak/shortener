@@ -79,7 +79,7 @@ func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
 		}
 
 		go func() {
-			h.Repo.DeleteUserURL(ctx, shortURLs, userID)
+			h.Repo.DeleteUserURL(context.Background(), shortURLs, userID)
 		}()
 		w.WriteHeader(http.StatusAccepted)
 	})
