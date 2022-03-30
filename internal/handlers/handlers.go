@@ -199,11 +199,16 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
+		longURLValue, deleted, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if deleted {
+			w.WriteHeader(http.StatusGone)
+			return
+		}
+
 		if longURLValue == "" {
 			http.Error(w, "There are no any short Urls!", http.StatusBadRequest)
 			return
