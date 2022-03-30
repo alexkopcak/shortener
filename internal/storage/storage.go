@@ -80,7 +80,7 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	if err != nil {
 		//fmt.Printf("%v\n", err)
 		//fmt.Println("create table")
-		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted BOOLEAN DEFAULT; FALSE, UNIQUE(user_id, original_url));")
+		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted BOOLEAN DEFAULT FALSE, UNIQUE(user_id, original_url));")
 		if err != nil {
 			//fmt.Println("create table error", err.Error())
 			//fmt.Printf("%v", err)
