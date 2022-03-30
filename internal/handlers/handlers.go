@@ -59,10 +59,30 @@ func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
+	h.Mux.Delete("/api/user/urls", h.DeleteUserURLHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
+
+		var shortURLs []string
+
+		if err := json.NewDecoder(r.Body).Decode(&shortURLs); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		go func() {
+			h.Repo.DeleteUserURL(ctx, shortURLs, userID)
+		}()
+		w.WriteHeader(http.StatusAccepted)
+	})
 }
 
 func (h *Handler) Ping() http.HandlerFunc {
