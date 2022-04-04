@@ -133,19 +133,19 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, bool, error) {
 	var longURL string
-	var deleted_at *time.Time
+	var deletedAt *time.Time
 
 	err := ps.db.QueryRow(ctx,
 		"SELECT original_url, deleted_at "+
 			"FROM shortener "+
 			"WHERE short_url = $1 ;",
-		shortURLValue).Scan(&longURL, &deleted_at)
+		shortURLValue).Scan(&longURL, &deletedAt)
 	if err != nil {
 		return "", false, err
 	}
 
 	//fmt.Println(deleted_at)
-	if deleted_at != nil {
+	if deletedAt != nil {
 		return longURL, true, nil
 	} else {
 		return longURL, false, nil
