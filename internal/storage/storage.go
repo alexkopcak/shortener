@@ -3,7 +3,8 @@ package storage
 import (
 	"context"
 	"errors"
-	"fmt"
+
+	//	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -81,7 +82,7 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	if err != nil {
 		//fmt.Printf("%v\n", err)
 		//fmt.Println("create table")
-		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted BOOLEAN DEFAULT FALSE, UNIQUE(user_id, original_url));")
+		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
 		if err != nil {
 			//fmt.Println("create table error", err.Error())
 			//fmt.Printf("%v", err)
@@ -132,17 +133,23 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, bool, error) {
 	var longURL string
-	var deleted bool
+	var deleted_at *time.Time
 
 	err := ps.db.QueryRow(ctx,
-		"SELECT original_url, deleted "+
+		"SELECT original_url, deleted_at "+
 			"FROM shortener "+
 			"WHERE short_url = $1 ;",
-		shortURLValue).Scan(&longURL, &deleted)
+		shortURLValue).Scan(&longURL, &deleted_at)
 	if err != nil {
 		return "", false, err
 	}
-	return longURL, deleted, nil
+
+	//fmt.Println(deleted_at)
+	if deleted_at != nil {
+		return longURL, true, nil
+	} else {
+		return longURL, false, nil
+	}
 }
 
 func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
@@ -231,9 +238,7 @@ func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, shortURLValues []s
 		return err
 	}
 
-	fmt.Println(idsArray, userID)
-
-	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted = TRUE WHERE user_id = $1 and short_url = ANY($2);", userID, idsArray)
+	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", userID, idsArray)
 	return err
 }
 
