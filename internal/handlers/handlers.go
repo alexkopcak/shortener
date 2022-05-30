@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -324,13 +325,13 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
-		if err != nil {
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		if err != nil && !errors.Is(err, storage.ErrDuplicateRecord) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if duplicate {
+		if errors.Is(err, storage.ErrDuplicateRecord) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusCreated)
@@ -371,14 +372,14 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		}
 
 		//		fmt.Printf("userID: %v\n", userID)
-		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
-		if err != nil {
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		if err != nil && !errors.Is(err, storage.ErrDuplicateRecord) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if duplicate {
+		if errors.Is(err, storage.ErrDuplicateRecord) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusCreated)
