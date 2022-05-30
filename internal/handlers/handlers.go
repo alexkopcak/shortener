@@ -10,7 +10,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -220,13 +219,13 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
+		longURLValue, deleted, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
-			if errors.Is(err, storage.ErrDeletedRecord) {
-				w.WriteHeader(http.StatusGone)
-				return
-			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if deleted {
+			w.WriteHeader(http.StatusGone)
 			return
 		}
 
@@ -325,31 +324,17 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
-			if errors.Is(err, storage.ErrDuplicatedRecord) {
-				w.WriteHeader(http.StatusConflict)
-				w.Header().Set("Content-Type", "application/json")
-				responseValue := struct {
-					ResultValue string `json:"result"`
-				}{
-					ResultValue: h.Cfg.BaseURL + "/" + requestValue,
-				}
-				if err := json.NewEncoder(w).Encode(&responseValue); err != nil {
-					http.Error(w, "Something went wrong!", http.StatusBadRequest)
-					return
-				}
-				return
-			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		//		if duplicate {
-		//			w.WriteHeader(http.StatusConflict)
-		//		} else {
-		w.WriteHeader(http.StatusCreated)
-		//		}
+		if duplicate {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 
 		responseValue := struct {
 			ResultValue string `json:"result"`
@@ -386,28 +371,18 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		}
 
 		//		fmt.Printf("userID: %v\n", userID)
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
-			if errors.Is(err, storage.ErrDuplicatedRecord) {
-				w.WriteHeader(http.StatusConflict)
-				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
-				if err != nil {
-					http.Error(w, "Something went wrong!", http.StatusBadRequest)
-					return
-				}
-				return
-			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		//		if duplicate {
-		//			w.WriteHeader(http.StatusConflict)
-		//		} else {
-		w.WriteHeader(http.StatusCreated)
-		//		}
+		if duplicate {
+			w.WriteHeader(http.StatusConflict)
+		} else {
+			w.WriteHeader(http.StatusCreated)
+		}
 		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)

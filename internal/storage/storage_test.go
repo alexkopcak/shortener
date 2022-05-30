@@ -46,13 +46,13 @@ func TestDictionary_AddURL(t *testing.T) {
 			d, err := NewDictionary(config.Config{})
 			require.NoError(t, err)
 			ctx := context.Background()
-			got, err := d.AddURL(ctx, tt.longURLValue, 0)
+			got, _, err := d.AddURL(ctx, tt.longURLValue, 0)
 			if tt.err {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 
-				longValue, err := d.GetURL(ctx, got)
+				longValue, _, err := d.GetURL(ctx, got)
 				require.NoError(t, err)
 				assert.Equal(t, longValue, tt.longURLValue)
 			}
@@ -89,7 +89,7 @@ func TestDictionary_GetURL(t *testing.T) {
 				Items: tt.fields.Items,
 			}
 			ctx := context.Background()
-			if got, _ := d.GetURL(ctx, tt.args.shortURLValue); got != tt.want {
+			if got, _, _ := d.GetURL(ctx, tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})
@@ -261,7 +261,7 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 			}
 
 			shortURL := strings.ReplaceAll((*got)[0].ShortURL, fmt.Sprint(tt.args.prefix, "/"), "")
-			originalURL, err := d.GetURL(tt.args.ctx, shortURL)
+			originalURL, _, err := d.GetURL(tt.args.ctx, shortURL)
 
 			assert.Equal(t, (*tt.args.items)[0].CorrelationID, (*got)[0].CorrelationID)
 			assert.Equal(t, (*tt.args.items)[0].OriginalURL, originalURL)
