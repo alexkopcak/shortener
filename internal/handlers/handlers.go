@@ -329,6 +329,16 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, storage.ErrDuplicatedRecord) {
 				w.WriteHeader(http.StatusConflict)
+				w.Header().Set("Content-Type", "application/json")
+				responseValue := struct {
+					ResultValue string `json:"result"`
+				}{
+					ResultValue: h.Cfg.BaseURL + "/" + requestValue,
+				}
+				if err := json.NewEncoder(w).Encode(&responseValue); err != nil {
+					http.Error(w, "Something went wrong!", http.StatusBadRequest)
+					return
+				}
 				return
 			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -380,6 +390,12 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, storage.ErrDuplicatedRecord) {
 				w.WriteHeader(http.StatusConflict)
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
+				if err != nil {
+					http.Error(w, "Something went wrong!", http.StatusBadRequest)
+					return
+				}
 				return
 			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
