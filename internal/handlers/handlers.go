@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -326,6 +327,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		}
 
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		fmt.Printf("!!!\n%s\n!!!", err)
 		duplicate := false
 		if errors.Is(err, storage.ErrDuplicateRecord) {
 			duplicate = true
@@ -379,6 +381,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		//		fmt.Printf("userID: %v\n", userID)
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		duplicate := false
+		fmt.Printf("!!!\n%s\n!!!", err)
 		if errors.Is(err, storage.ErrDuplicateRecord) {
 			duplicate = true
 			err = nil
