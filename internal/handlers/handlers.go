@@ -220,13 +220,13 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
-		longURLValue, deleted, err := h.Repo.GetURL(r.Context(), idValue)
+		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotExistRecord) {
+				w.WriteHeader(http.StatusGone)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-		if deleted {
-			w.WriteHeader(http.StatusGone)
 			return
 		}
 
@@ -329,8 +329,8 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		if err != nil {
 			if !errors.Is(err, storage.ErrDuplicateRecord) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
 			}
-			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		if errors.Is(err, storage.ErrDuplicateRecord) {

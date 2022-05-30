@@ -39,7 +39,7 @@ func shortURLGenerator(n int) string {
 
 type Storage interface {
 	AddURL(ctx context.Context, longURLValue string, userID int32) (string, error)
-	GetURL(ctx context.Context, shortURLValue string) (string, bool, error)
+	GetURL(ctx context.Context, shortURLValue string) (string, error)
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
@@ -135,7 +135,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 	return shortURLvalue, nil
 }
 
-func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, bool, error) {
+func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
 	var deletedAt *time.Time
 
@@ -145,14 +145,14 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 			"WHERE short_url = $1 ;",
 		shortURLValue).Scan(&longURL, &deletedAt)
 	if err != nil {
-		return "", false, err
+		return "", err
 	}
 
 	//fmt.Println(deleted_at)
 	if deletedAt != nil {
-		return longURL, true, nil
+		return longURL, ErrNotExistRecord
 	} else {
-		return longURL, false, nil
+		return longURL, nil
 	}
 }
 
@@ -301,17 +301,17 @@ func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int
 	return shortURLvalue, nil
 }
 
-func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, bool, error) {
+func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	if strings.TrimSpace(shortURLValue) == "" {
-		return "", false, errors.New("empty short URL value")
+		return "", errors.New("empty short URL value")
 	}
-	return d.Items[shortURLValue], false, nil
+	return d.Items[shortURLValue], nil
 }
 
 func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
 	for _, v := range d.UserItems[userID] {
-		longURL, _, err := d.GetURL(ctx, v)
+		longURL, err := d.GetURL(ctx, v)
 
 		item := UserExportType{}
 		if err != nil {
