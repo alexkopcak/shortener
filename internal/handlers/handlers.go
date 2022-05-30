@@ -326,16 +326,21 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 		}
 
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
-		if err != nil && !errors.Is(err, storage.ErrDuplicateRecord) {
+		if err != nil {
+			if errors.Is(err, storage.ErrDuplicateRecord) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusConflict)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if errors.Is(err, storage.ErrDuplicateRecord) {
-			w.WriteHeader(http.StatusConflict)
-		} else {
-			w.WriteHeader(http.StatusCreated)
-		}
+		// if errors.Is(err, storage.ErrDuplicateRecord) {
+		// 	w.WriteHeader(http.StatusConflict)
+		// } else {
+		w.WriteHeader(http.StatusCreated)
+		// }
 
 		responseValue := struct {
 			ResultValue string `json:"result"`
@@ -373,17 +378,23 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 
 		//		fmt.Printf("userID: %v\n", userID)
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
-		if err != nil && !errors.Is(err, storage.ErrDuplicateRecord) {
+		if err != nil {
+			if errors.Is(err, storage.ErrDuplicateRecord) {
+				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+				w.WriteHeader(http.StatusConflict)
+				w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if errors.Is(err, storage.ErrDuplicateRecord) {
-			w.WriteHeader(http.StatusConflict)
-		} else {
-			w.WriteHeader(http.StatusCreated)
-		}
+		// w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		// if errors.Is(err, storage.ErrDuplicateRecord) {
+		// 	w.WriteHeader(http.StatusConflict)
+		// } else {
+		w.WriteHeader(http.StatusCreated)
+		//		}
 		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
