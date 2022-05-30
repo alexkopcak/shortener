@@ -130,8 +130,9 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 			return "", err
 		}
 		shortURLvalue = shortURL
+		return shortURLvalue, ErrDuplicateRecord
 	}
-	return shortURLvalue, ErrDuplicateRecord
+	return shortURLvalue, nil
 }
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, bool, error) {
