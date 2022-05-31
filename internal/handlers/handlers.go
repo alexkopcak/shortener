@@ -24,8 +24,9 @@ import (
 type (
 	Handler struct {
 		*chi.Mux
-		Repo storage.Storage
-		Cfg  config.Config
+		Repo     storage.Storage
+		Cfg      config.Config
+		dChannel chan *storage.DeletedShortURLValues
 	}
 
 	key uint64
@@ -44,11 +45,12 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
+func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
-		Mux:  chi.NewMux(),
-		Repo: repo,
-		Cfg:  cfg,
+		Mux:      chi.NewMux(),
+		Repo:     repo,
+		Cfg:      cfg,
+		dChannel: dChan,
 	}
 
 	h.Mux.Use(h.authMiddlewareHandler)
@@ -79,9 +81,16 @@ func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
 			return
 		}
 
-		go func() {
-			h.Repo.DeleteUserURL(context.Background(), shortURLs, userID)
-		}()
+		deletedURLs := &storage.DeletedShortURLValues{
+			ShortURLValues: shortURLs,
+			UserIDValue:    userID,
+		}
+
+		h.dChannel <- deletedURLs
+
+		// go func() {
+		// 	h.Repo.DeleteUserURL(context.Background(), deletedURLs)
+		// }()
 		w.WriteHeader(http.StatusAccepted)
 	})
 }

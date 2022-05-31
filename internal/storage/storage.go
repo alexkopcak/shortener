@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"errors"
+	"sync"
 
 	//	"fmt"
 	"io"
@@ -27,6 +28,11 @@ var (
 	ErrNotExistRecord  = errors.New("record not exist")
 )
 
+type DeletedShortURLValues struct {
+	ShortURLValues []string
+	UserIDValue    int32
+}
+
 func shortURLGenerator(n int) string {
 	rand.Seed(time.Now().UnixNano())
 	var letterRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -43,24 +49,26 @@ type Storage interface {
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
-	DeleteUserURL(ctx context.Context, shortURLValues []string, userID int32) error
+	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
 }
 
-func InitializeStorage(cfg config.Config) (Storage, error) {
+func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	//	fmt.Println("initialize storage")
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
 		return NewDictionary(cfg)
 	} else {
 		//		fmt.Println("use db")
-		return NewPostgresStorage(cfg)
+		return NewPostgresStorage(cfg, wg, dChannel)
 	}
 }
 
 type PostgresStorage struct {
-	db *pgx.Conn
+	db            *pgx.Conn
+	WaitGroup     *sync.WaitGroup
+	DeleteChannel chan *DeletedShortURLValues
 }
 
-func NewPostgresStorage(cfg config.Config) (Storage, error) {
+func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
 	//fmt.Println("connect to db")
 	if err != nil {
@@ -95,9 +103,15 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 		}
 	}
 
-	return &PostgresStorage{
-		db: ps,
-	}, nil
+	pstorage := &PostgresStorage{
+		db:            ps,
+		WaitGroup:     wg,
+		DeleteChannel: dChannel,
+	}
+
+	pstorage.StartDeleteWorker()
+
+	return pstorage, nil
 }
 
 func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
@@ -235,14 +249,32 @@ func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	return err
 }
 
-func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, shortURLValues []string, userID int32) error {
+func (ps *PostgresStorage) StartDeleteWorker() {
+	workerCount := 3
+
+	for i := 0; i < workerCount; i++ {
+		ps.WaitGroup.Add(1)
+		go ps.DeleteWorker()
+	}
+}
+
+func (ps *PostgresStorage) DeleteWorker() {
+	defer ps.WaitGroup.Done()
+
+	for job := range ps.DeleteChannel {
+		ps.DeleteUserURL(context.Background(), job)
+	}
+}
+
+func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	idsArray := &pgtype.TextArray{}
-	err := idsArray.Set(shortURLValues)
+	err := idsArray.Set(deletedURLs.ShortURLValues)
+
 	if err != nil {
 		return err
 	}
 
-	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", userID, idsArray)
+	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", deletedURLs.UserIDValue, idsArray)
 	return err
 }
 
@@ -361,6 +393,6 @@ func (d *Dictionary) Ping(ctx context.Context) error {
 	return nil
 }
 
-func (d *Dictionary) DeleteUserURL(ctx context.Context, shortURLValues []string, userID int32) error {
+func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	return nil
 }

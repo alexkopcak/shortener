@@ -320,7 +320,7 @@ func TestURLHandler(t *testing.T) {
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
-				}),
+				}, nil),
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
@@ -357,7 +357,7 @@ func TestURLHandler(t *testing.T) {
 						BaseURL:        baseURL,
 						SecretKey:      secretKey,
 						CookieAuthName: cookieAuthName,
-					}),
+					}, nil),
 				}
 				h2.Handler.ServeHTTP(w2, request2)
 				result2 := w2.Result()
@@ -399,7 +399,7 @@ func TestCookie(t *testing.T) {
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
-				}),
+				}, nil),
 			}
 			//fmt.Printf("request %v\n", request)
 			h.Handler.ServeHTTP(w, request)
