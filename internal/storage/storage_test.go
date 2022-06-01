@@ -13,13 +13,6 @@ import (
 )
 
 func TestDictionary_AddURL(t *testing.T) {
-	// type fields struct {
-	// 	MinShortURLLength int
-	// 	Items             map[string]string
-	// }
-	// type args struct {
-	// 	longURLValue string
-	// }
 	tests := []struct {
 		name         string
 		longURLValue string
@@ -56,10 +49,6 @@ func TestDictionary_AddURL(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, longValue, tt.longURLValue)
 			}
-			//for _, item := range tt.args.longURLValue {
-			//	got, _ := d.AddURL(item, 0)
-			//	assert.Equal(t, strings.TrimSpace(item), dd.Items[got])
-			//}
 		})
 	}
 }
@@ -191,7 +180,6 @@ func TestDictionary_GetUserURL(t *testing.T) {
 				fileStoragePath: tt.fields.fileStoragePath,
 			}
 			ctx := context.Background()
-			//fmt.Printf("%v\n", *d)
 			got, err := d.GetUserURL(ctx, tt.args.prefix, tt.args.userID)
 			require.NoError(t, err)
 			if !reflect.DeepEqual(got, tt.want) {

@@ -19,6 +19,8 @@ import (
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
+
+	"net/http/pprof"
 )
 
 type (
@@ -63,6 +65,14 @@ func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.Del
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
 	h.Mux.Delete("/api/user/urls", h.DeleteUserURLHandler())
+
+	h.Mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+	h.Mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	h.Mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	h.Mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	h.Mux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	h.Mux.Handle("/debug/pprof/{cmd}", http.HandlerFunc(pprof.Index))
+
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
@@ -88,9 +98,6 @@ func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
 
 		h.dChannel <- deletedURLs
 
-		// go func() {
-		// 	h.Repo.DeleteUserURL(context.Background(), deletedURLs)
-		// }()
 		w.WriteHeader(http.StatusAccepted)
 	})
 }
@@ -137,19 +144,13 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int32, error) {
 	}
 
 	data, err := hex.DecodeString(cookie.Value)
-	//	fmt.Printf("err %v\n", err)
 	if err != nil {
 		return 0, err
 	}
 
-	//	fmt.Printf("data[:4] %v\n", data)
-
-	//id := int(binary.BigEndian.Uint32(data[:4]))
 	var id int32
 	err = binary.Read(bytes.NewReader(data[:4]), binary.BigEndian, &id)
 	if err != nil {
-		//		fmt.Printf("%v\n", err)
-
 		return 0, err
 	}
 
@@ -176,7 +177,6 @@ func (h *Handler) generateAuthCookie() (*http.Cookie, int32, error) {
 
 	var result int32
 	err = binary.Read(bytes.NewReader(id), binary.BigEndian, &result)
-	//	fmt.Printf("%v\n", err)
 
 	return &http.Cookie{
 			Name:  h.Cfg.CookieAuthName,
@@ -193,12 +193,10 @@ func (h *Handler) authMiddlewareHandler(next http.Handler) http.Handler {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		//		fmt.Println("auth middle ware")
+
 		id, err := h.decodeAuthCookie(cookie)
-		//		fmt.Printf("id: %v err: %v\n", id, err)
 		if err != nil {
 			cookie, id, err = h.generateAuthCookie()
-			//			fmt.Printf("cookie: %v id: %v err: %v\n", cookie, id, err)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
@@ -382,7 +380,6 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 			return
 		}
 
-		//		fmt.Printf("userID: %v\n", userID)
 		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
 			if !errors.Is(err, storage.ErrDuplicateRecord) {

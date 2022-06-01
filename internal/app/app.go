@@ -29,12 +29,10 @@ func Run() error {
 	cfg.FileStoragePath = *fileStoragePathPointer
 	cfg.DBConnectionString = *dbConnectionString
 
-	//cfg.DBConnectionString = ""
-	// Repository
-	//fmt.Println("db connection:", cfg.DBConnectionString)
 	wg := &sync.WaitGroup{}
 	dChannel := make(chan *storage.DeletedShortURLValues)
 
+	// Repository
 	repository, err := storage.InitializeStorage(cfg, wg, dChannel)
 	if err != nil {
 		return err

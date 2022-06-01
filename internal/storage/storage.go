@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync"
 
-	//	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -53,13 +52,10 @@ type Storage interface {
 }
 
 func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
-	//	fmt.Println("initialize storage")
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
 		return NewDictionary(cfg)
-	} else {
-		//		fmt.Println("use db")
-		return NewPostgresStorage(cfg, wg, dChannel)
 	}
+	return NewPostgresStorage(cfg, wg, dChannel)
 }
 
 type PostgresStorage struct {
@@ -70,35 +66,24 @@ type PostgresStorage struct {
 
 func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
-	//fmt.Println("connect to db")
 	if err != nil {
-		//fmt.Println("error", err.Error())
 		return NewDictionary(cfg)
 	}
-	// defer ps.Close(context.Background())
 
 	var cnt int
 	err = ps.QueryRow(context.Background(), "SELECT COUNT(*) FROM pg_database WHERE datname = 'shortener_db';").Scan(&cnt)
 
 	if cnt != 1 || err != nil {
-		//fmt.Println("create db")
 		_, err = ps.Exec(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
 		if err != nil {
-			//fmt.Println("can't create db")
-			//fmt.Printf("%v\n", err)
 			return NewDictionary(cfg)
 		}
 	}
 
 	_, err = ps.Exec(context.Background(), "SELECT * FROM shortener LIMIT 1;")
-	//fmt.Println("table exsist?")
 	if err != nil {
-		//fmt.Printf("%v\n", err)
-		//fmt.Println("create table")
 		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
 		if err != nil {
-			//fmt.Println("create table error", err.Error())
-			//fmt.Printf("%v", err)
 			return NewDictionary(cfg)
 		}
 	}
@@ -162,7 +147,6 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 		return "", err
 	}
 
-	//fmt.Println(deleted_at)
 	if deletedAt != nil {
 		return longURL, ErrNotExistRecord
 	} else {
@@ -243,7 +227,6 @@ func (ps *PostgresStorage) PostAPIBatch(ctx context.Context, items *BatchRequest
 func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	err := ps.db.Ping(ctx)
 	if err != nil {
-		//fmt.Printf("%v\n", err)
 		return err
 	}
 	return err
