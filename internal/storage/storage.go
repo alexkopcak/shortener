@@ -3,6 +3,9 @@ package storage
 import (
 	"context"
 	"errors"
+	"sync"
+
+	//	"fmt"
 	"io"
 	"math/rand"
 	"time"
@@ -11,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/alexkopcak/shortener/internal/config"
+	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
 )
 
@@ -18,6 +22,16 @@ const (
 	minShortURLLengthConst = 5
 	insertSatement         = "insert statement"
 )
+
+var (
+	ErrDuplicateRecord = errors.New("record are duplicate")
+	ErrNotExistRecord  = errors.New("record not exist")
+)
+
+type DeletedShortURLValues struct {
+	ShortURLValues []string
+	UserIDValue    int32
+}
 
 func shortURLGenerator(n int) string {
 	rand.Seed(time.Now().UnixNano())
@@ -30,28 +44,31 @@ func shortURLGenerator(n int) string {
 }
 
 type Storage interface {
-	AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error)
+	AddURL(ctx context.Context, longURLValue string, userID int32) (string, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
+	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
 }
 
-func InitializeStorage(cfg config.Config) (Storage, error) {
+func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	//	fmt.Println("initialize storage")
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
 		return NewDictionary(cfg)
 	} else {
 		//		fmt.Println("use db")
-		return NewPostgresStorage(cfg)
+		return NewPostgresStorage(cfg, wg, dChannel)
 	}
 }
 
 type PostgresStorage struct {
-	db *pgx.Conn
+	db            *pgx.Conn
+	WaitGroup     *sync.WaitGroup
+	DeleteChannel chan *DeletedShortURLValues
 }
 
-func NewPostgresStorage(cfg config.Config) (Storage, error) {
+func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
 	//fmt.Println("connect to db")
 	if err != nil {
@@ -78,7 +95,7 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 	if err != nil {
 		//fmt.Printf("%v\n", err)
 		//fmt.Println("create table")
-		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), UNIQUE(user_id, original_url));")
+		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
 		if err != nil {
 			//fmt.Println("create table error", err.Error())
 			//fmt.Printf("%v", err)
@@ -86,15 +103,20 @@ func NewPostgresStorage(cfg config.Config) (Storage, error) {
 		}
 	}
 
-	return &PostgresStorage{
-		db: ps,
-	}, nil
+	pstorage := &PostgresStorage{
+		db:            ps,
+		WaitGroup:     wg,
+		DeleteChannel: dChannel,
+	}
+
+	pstorage.StartDeleteWorker()
+
+	return pstorage, nil
 }
 
-func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error) {
-	duplicate := false
+func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
-		return "", duplicate, errors.New("empty long URL value")
+		return "", errors.New("empty long URL value")
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
@@ -107,7 +129,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 		shortURLvalue,
 		longURLValue)
 	if err != nil {
-		return "", duplicate, err
+		return "", err
 	}
 
 	if cTag.RowsAffected() == 0 {
@@ -119,25 +141,33 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 			userID, longURLValue).Scan(&shortURL)
 
 		if err != nil {
-			return "", duplicate, err
+			return "", err
 		}
 		shortURLvalue = shortURL
-		duplicate = true
+		return shortURLvalue, ErrDuplicateRecord
 	}
-	return shortURLvalue, duplicate, nil
+	return shortURLvalue, nil
 }
 
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
+	var deletedAt *time.Time
+
 	err := ps.db.QueryRow(ctx,
-		"SELECT original_url "+
+		"SELECT original_url, deleted_at "+
 			"FROM shortener "+
 			"WHERE short_url = $1 ;",
-		shortURLValue).Scan(&longURL)
+		shortURLValue).Scan(&longURL, &deletedAt)
 	if err != nil {
-		return "l", err
+		return "", err
 	}
-	return longURL, nil
+
+	//fmt.Println(deleted_at)
+	if deletedAt != nil {
+		return longURL, ErrNotExistRecord
+	} else {
+		return longURL, nil
+	}
 }
 
 func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
@@ -219,6 +249,35 @@ func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	return err
 }
 
+func (ps *PostgresStorage) StartDeleteWorker() {
+	workerCount := 3
+
+	for i := 0; i < workerCount; i++ {
+		ps.WaitGroup.Add(1)
+		go ps.DeleteWorker()
+	}
+}
+
+func (ps *PostgresStorage) DeleteWorker() {
+	defer ps.WaitGroup.Done()
+
+	for job := range ps.DeleteChannel {
+		ps.DeleteUserURL(context.Background(), job)
+	}
+}
+
+func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
+	idsArray := &pgtype.TextArray{}
+	err := idsArray.Set(deletedURLs.ShortURLValues)
+
+	if err != nil {
+		return err
+	}
+
+	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", deletedURLs.UserIDValue, idsArray)
+	return err
+}
+
 type Dictionary struct {
 	Items           map[string]string
 	UserItems       map[int32][]string
@@ -255,9 +314,9 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, bool, error) {
+func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
-		return "", false, errors.New("empty long URL value")
+		return "", errors.New("empty long URL value")
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
@@ -268,10 +327,10 @@ func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int
 		ShortURLValue: shortURLvalue,
 		LongURLValue:  longURLValue,
 	}); err != nil {
-		return "", false, err
+		return "", err
 	}
 
-	return shortURLvalue, false, nil
+	return shortURLvalue, nil
 }
 
 func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, error) {
@@ -331,5 +390,9 @@ func (d *Dictionary) PostAPIBatch(ctx context.Context, items *BatchRequestArray,
 }
 
 func (d *Dictionary) Ping(ctx context.Context) error {
+	return nil
+}
+
+func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	return nil
 }

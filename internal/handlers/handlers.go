@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -23,8 +24,9 @@ import (
 type (
 	Handler struct {
 		*chi.Mux
-		Repo storage.Storage
-		Cfg  config.Config
+		Repo     storage.Storage
+		Cfg      config.Config
+		dChannel chan *storage.DeletedShortURLValues
 	}
 
 	key uint64
@@ -43,11 +45,12 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
+func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
-		Mux:  chi.NewMux(),
-		Repo: repo,
-		Cfg:  cfg,
+		Mux:      chi.NewMux(),
+		Repo:     repo,
+		Cfg:      cfg,
+		dChannel: dChan,
 	}
 
 	h.Mux.Use(h.authMiddlewareHandler)
@@ -59,10 +62,37 @@ func URLHandler(repo storage.Storage, cfg config.Config) *Handler {
 	h.Mux.Post("/", h.PostHandler())
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
+	h.Mux.Delete("/api/user/urls", h.DeleteUserURLHandler())
 	h.Mux.MethodNotAllowed(h.MethodNotAllowed())
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		userID, _ := ctx.Value(keyPrincipalID).(int32)
+
+		var shortURLs []string
+
+		if err := json.NewDecoder(r.Body).Decode(&shortURLs); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		deletedURLs := &storage.DeletedShortURLValues{
+			ShortURLValues: shortURLs,
+			UserIDValue:    userID,
+		}
+
+		h.dChannel <- deletedURLs
+
+		// go func() {
+		// 	h.Repo.DeleteUserURL(context.Background(), deletedURLs)
+		// }()
+		w.WriteHeader(http.StatusAccepted)
+	})
 }
 
 func (h *Handler) Ping() http.HandlerFunc {
@@ -201,9 +231,14 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 		}
 		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
+			if errors.Is(err, storage.ErrNotExistRecord) {
+				w.WriteHeader(http.StatusGone)
+				return
+			}
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
 		if longURLValue == "" {
 			http.Error(w, "There are no any short Urls!", http.StatusBadRequest)
 			return
@@ -299,13 +334,15 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			if !errors.Is(err, storage.ErrDuplicateRecord) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
-		if duplicate {
+		if errors.Is(err, storage.ErrDuplicateRecord) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusCreated)
@@ -346,14 +383,16 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		}
 
 		//		fmt.Printf("userID: %v\n", userID)
-		requestValue, duplicate, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
+			if !errors.Is(err, storage.ErrDuplicateRecord) {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		if duplicate {
+		if errors.Is(err, storage.ErrDuplicateRecord) {
 			w.WriteHeader(http.StatusConflict)
 		} else {
 			w.WriteHeader(http.StatusCreated)

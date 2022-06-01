@@ -3,6 +3,7 @@ package app
 import (
 	"flag"
 	"net/http"
+	"sync"
 
 	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/alexkopcak/shortener/internal/handlers"
@@ -31,7 +32,10 @@ func Run() error {
 	//cfg.DBConnectionString = ""
 	// Repository
 	//fmt.Println("db connection:", cfg.DBConnectionString)
-	repository, err := storage.InitializeStorage(cfg)
+	wg := &sync.WaitGroup{}
+	dChannel := make(chan *storage.DeletedShortURLValues)
+
+	repository, err := storage.InitializeStorage(cfg, wg, dChannel)
 	if err != nil {
 		return err
 	}
@@ -39,9 +43,14 @@ func Run() error {
 	//HTTP Server
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(repository, cfg),
+		Handler: handlers.URLHandler(repository, cfg, dChannel),
 	}
 
 	// start server
-	return server.ListenAndServe()
+	err = server.ListenAndServe()
+
+	close(dChannel)
+	wg.Wait()
+
+	return err
 }
