@@ -271,12 +271,12 @@ func BenchmarkAddURL(b *testing.B) {
 	}
 	b.ResetTimer()
 
-	var user_id int32 = 0
+	var userID int32 = 0
 	addedURL := "LongURLValue"
 	b.Run("addURL", func(b *testing.B) {
-		for ; user_id < userCount; user_id++ {
+		for ; userID < userCount; userID++ {
 			for i := 0; i < runsCount; i++ {
-				dic.AddURL(context.Background(), addedURL, user_id)
+				dic.AddURL(context.Background(), addedURL, userID)
 			}
 		}
 	})
@@ -288,10 +288,10 @@ func BenchmarkAddURL(b *testing.B) {
 		}
 	})
 
-	user_id = 0
+	userID = 0
 	b.Run("getUserURL", func(b *testing.B) {
 		for i := 0; i < runsCount; i++ {
-			dic.GetUserURL(context.Background(), "", user_id)
+			dic.GetUserURL(context.Background(), "", userID)
 		}
 	})
 }
