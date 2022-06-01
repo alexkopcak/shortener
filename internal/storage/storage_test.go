@@ -257,3 +257,41 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 		})
 	}
 }
+
+func BenchmarkAddURL(b *testing.B) {
+	runsCount := 10000
+	var userCount int32 = 3
+
+	dic, err := NewDictionary(config.Config{
+		DBConnectionString: "",
+		FileStoragePath:    "",
+	})
+	if err != nil {
+		panic(err)
+	}
+	b.ResetTimer()
+
+	var user_id int32 = 0
+	addedURL := "LongURLValue"
+	b.Run("addURL", func(b *testing.B) {
+		for ; user_id < userCount; user_id++ {
+			for i := 0; i < runsCount; i++ {
+				dic.AddURL(context.Background(), addedURL, user_id)
+			}
+		}
+	})
+
+	getedURL := "ShortURLValue"
+	b.Run("getURL", func(b *testing.B) {
+		for i := 0; i < runsCount; i++ {
+			dic.GetURL(context.Background(), getedURL)
+		}
+	})
+
+	user_id = 0
+	b.Run("getUserURL", func(b *testing.B) {
+		for i := 0; i < runsCount; i++ {
+			dic.GetUserURL(context.Background(), "", user_id)
+		}
+	})
+}
