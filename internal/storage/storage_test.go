@@ -3,6 +3,7 @@ package storage
 import (
 	"context"
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -258,6 +259,51 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 	}
 }
 
+func TestProducerConsumer(t *testing.T) {
+	type args struct {
+		filename string
+		item     *ItemType
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			args: args{
+				filename: "localStorage.test",
+				item: &ItemType{
+					ShortURLValue: "this is the short URL",
+					LongURLValue:  "this is the long URL",
+				},
+			},
+			name:    "test producer and consumer",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer os.Remove(tt.args.filename)
+
+			if err := ProducerWrite(tt.args.filename, tt.args.item); (err != nil) != tt.wantErr {
+				t.Errorf("ProducerWrite() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+
+			consumer, err := NewConsumer(tt.args.filename)
+			require.NoError(t, err)
+
+			defer consumer.Close()
+
+			item, err := consumer.ReadItem()
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.args.item.LongURLValue, item.LongURLValue)
+			assert.Equal(t, tt.args.item.ShortURLValue, item.ShortURLValue)
+		})
+	}
+}
+
 func BenchmarkAddURL(b *testing.B) {
 	runsCount := 10000
 	var userCount int32 = 3
@@ -294,4 +340,198 @@ func BenchmarkAddURL(b *testing.B) {
 			dic.GetUserURL(context.Background(), "", userID)
 		}
 	})
+}
+
+func TestDictionary_DeleteUserURL(t *testing.T) {
+	type fields struct {
+		Items           map[string]string
+		UserItems       map[int32][]string
+		fileStoragePath string
+	}
+	type args struct {
+		ctx         context.Context
+		deletedURLs *DeletedShortURLValues
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Delete User URL from directory",
+			fields: fields{
+				Items:           map[string]string{},
+				UserItems:       map[int32][]string{},
+				fileStoragePath: "",
+			},
+			args: args{
+				ctx: context.Background(),
+				deletedURLs: &DeletedShortURLValues{
+					ShortURLValues: make([]string, 0),
+					UserIDValue:    0,
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Config{
+				FileStoragePath: "localStorage.test",
+			}
+
+			defer os.Remove(cfg.FileStoragePath)
+
+			err := ProducerWrite(cfg.FileStoragePath, &ItemType{
+				ShortURLValue: "short URL value",
+				LongURLValue:  "long URL value",
+			})
+
+			require.NoError(t, err)
+
+			d := &Dictionary{
+				Items:           tt.fields.Items,
+				UserItems:       tt.fields.UserItems,
+				fileStoragePath: tt.fields.fileStoragePath,
+			}
+			require.NoError(t, err)
+
+			item := ItemType{
+				ShortURLValue: "",
+				LongURLValue:  "this is long URL value",
+			}
+
+			item.ShortURLValue, err = d.AddURL(tt.args.ctx, item.LongURLValue, tt.args.deletedURLs.UserIDValue)
+			require.NoError(t, err)
+
+			longURL, err := d.GetURL(tt.args.ctx, item.ShortURLValue)
+			require.NoError(t, err)
+			assert.Equal(t, item.LongURLValue, longURL)
+
+			assert.Len(t, d.Items, 1)
+			assert.Len(t, d.UserItems, 1)
+
+			tt.args.deletedURLs.ShortURLValues = append(tt.args.deletedURLs.ShortURLValues, item.ShortURLValue)
+
+			if err := d.DeleteUserURL(tt.args.ctx, tt.args.deletedURLs); (err != nil) != tt.wantErr {
+				t.Errorf("Dictionary.DeleteUserURL() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			require.NoError(t, err)
+			assert.Len(t, d.Items, 0)
+			assert.Len(t, d.UserItems[tt.args.deletedURLs.UserIDValue], 0)
+
+		})
+	}
+}
+
+func TestDictionary_NewDictionaryWithStorage(t *testing.T) {
+	tests := []struct {
+		name    string
+		wantErr bool
+	}{
+		{
+			name: "New Dictionary With Storage",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := config.Config{
+				FileStoragePath: "localStorage.test",
+			}
+
+			defer os.Remove(cfg.FileStoragePath)
+
+			err := ProducerWrite(cfg.FileStoragePath, &ItemType{
+				ShortURLValue: "short URL value",
+				LongURLValue:  "long URL value",
+			})
+
+			require.NoError(t, err)
+
+			d, err := NewDictionary(cfg)
+			require.NoError(t, err)
+			assert.Len(t, d.(*Dictionary).Items, 1)
+		})
+	}
+}
+
+func TestDictionary_DeleteUserURLSecond(t *testing.T) {
+	type fields struct {
+		Items           map[string]string
+		UserItems       map[int32][]string
+		fileStoragePath string
+	}
+	type args struct {
+		ctx         context.Context
+		deletedURLs *DeletedShortURLValues
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Delete User URL from directory empty URLs",
+			fields: fields{
+				Items:           map[string]string{},
+				UserItems:       map[int32][]string{},
+				fileStoragePath: "",
+			},
+			args: args{
+				ctx:         context.Background(),
+				deletedURLs: nil,
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Dictionary{
+				Items:           tt.fields.Items,
+				UserItems:       tt.fields.UserItems,
+				fileStoragePath: tt.fields.fileStoragePath,
+			}
+			if err := d.DeleteUserURL(tt.args.ctx, tt.args.deletedURLs); (err != nil) != tt.wantErr {
+				t.Errorf("Dictionary.DeleteUserURL() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+		})
+	}
+}
+
+func TestDictionary_Ping(t *testing.T) {
+	type fields struct {
+		Items           map[string]string
+		UserItems       map[int32][]string
+		fileStoragePath string
+	}
+	type args struct {
+		ctx context.Context
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name:    "simple ping test",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			d := &Dictionary{
+				Items:           tt.fields.Items,
+				UserItems:       tt.fields.UserItems,
+				fileStoragePath: tt.fields.fileStoragePath,
+			}
+			if err := d.Ping(tt.args.ctx); (err != nil) != tt.wantErr {
+				t.Errorf("Dictionary.Ping() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

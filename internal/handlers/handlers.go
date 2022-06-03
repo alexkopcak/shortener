@@ -1,3 +1,4 @@
+// package handlers endpoints
 package handlers
 
 import (
@@ -23,6 +24,7 @@ import (
 	"net/http/pprof"
 )
 
+// hanler class.
 type (
 	Handler struct {
 		*chi.Mux
@@ -47,6 +49,7 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
+// create handler object and set handlers endpoints.
 func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
 		Mux:      chi.NewMux(),
@@ -79,6 +82,14 @@ func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.Del
 	return h
 }
 
+// DeleteUserURLHandler godoc
+// @Summary delete user URLs based on params
+// @Tags Storage
+// @Accept json
+// @Param shortURLs body string true
+// @Success 202 {string} string
+// @Failure 400 {string} string
+// @Router /api/user/urls [delete]
 func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -102,6 +113,12 @@ func (h *Handler) DeleteUserURLHandler() http.HandlerFunc {
 	})
 }
 
+// Ping godoc
+// @Summary simple test database connection
+// @Tags Health
+// @Success 200 {string} string
+// @Failure 400 {string} string
+// @Router /ping [get]
 func (h *Handler) Ping() http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h.Repo.Ping(r.Context()) == nil {
@@ -220,6 +237,13 @@ func (h *Handler) NotFound() http.HandlerFunc {
 	}
 }
 
+// GetHandler godoc
+// @Summary get short URL value
+// @Tags Storage
+// @Param idValue path string true "idValue"
+// @Success 307 {string} string
+// @Failure 400,410 {string} string
+// @Router /{idValue} [get]
 func (h *Handler) GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idValue := chi.URLParam(r, "idValue")
@@ -246,6 +270,12 @@ func (h *Handler) GetHandler() http.HandlerFunc {
 	}
 }
 
+// GetAPIAllURLHandler godoc
+// @Summary get short URL value
+// @Tags Storage
+// @Success 200,204 {string} string
+// @Failure 400 {string} string
+// @Router /api/user/urls [get]
 func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -274,6 +304,14 @@ func (h *Handler) GetAPIAllURLHandler() http.HandlerFunc {
 	}
 }
 
+// PostAPIBatchHandler godoc
+// @Summary add batch short URL values
+// @Tags Storage
+// @Accept json
+// @Param batchrequest body storage.BatchRequestArray true "Batch request"
+// @Success 201 {string} string
+// @Failure 400 {array} storage.BatchRequest
+// @Router /api/shorten/batch [post]
 func (h *Handler) PostAPIBatchHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -307,6 +345,14 @@ func (h *Handler) PostAPIBatchHandler() http.HandlerFunc {
 	}
 }
 
+// PostAPIHandler godoc
+// @Summary set short URL value
+// @Tags Storage
+// @Accept json
+// @Param bodyraw body aliasRequest true "Alias request"
+// @Success 201 {string} string
+// @Failure 400,409 {string} string
+// @Router /api/shorten [post]
 func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
@@ -358,6 +404,14 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 	}
 }
 
+// PostHandler godoc
+// @Summary set short URL value
+// @Tags Storage
+// @Accept string
+// @Param bodyraw body aliasRequest true "Alias request"
+// @Success 201 {string} string
+// @Failure 400,409 {string} string
+// @Router /api/shorten [post]
 func (h *Handler) PostHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
