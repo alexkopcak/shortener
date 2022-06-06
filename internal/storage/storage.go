@@ -20,7 +20,6 @@ import (
 
 const (
 	minShortURLLengthConst = 5 // short URL length used at func shortURLGenerator
-	insertSatement         = "insert statement"
 )
 
 // Custom error implementation.
@@ -326,7 +325,7 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-// add original uRl value to memory storage.
+// add original URL value to memory storage.
 func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
@@ -378,7 +377,7 @@ func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32
 	return result, nil
 }
 
-// group addition of short URL values to the memory storage postgres via api.
+// group addition of short URL values to the memory storage via api.
 //
 // items - array of BatchRequest
 // prefix - shortener service name
@@ -442,5 +441,201 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 		a[len(a)-1] = ""
 		d.UserItems[deletedURLs.UserIDValue] = a[:len(a)-1]
 	}
+	return nil
+}
+
+// linked list storage item.
+type URLItem struct {
+	ShortURLValue    string
+	OriginalURLValue string
+	Next             *URLItem
+}
+
+// linked list storage implementation.
+type LinkedListURLItem struct {
+	Head *URLItem
+	Tail *URLItem
+}
+
+// multiuser linked list storage implementation.
+type UsersLinkedListMemoryStorage struct {
+	LinkedListStorage map[int32]*LinkedListURLItem
+}
+
+// create a new linked list storage implementation.
+func NewLinkedListStorage() Storage {
+	lls := make(map[int32]*LinkedListURLItem)
+	return UsersLinkedListMemoryStorage{
+		LinkedListStorage: lls,
+	}
+}
+
+// add original URL value to linked list storage.
+func (l UsersLinkedListMemoryStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
+	if strings.TrimSpace(longURLValue) == "" {
+		return "", errors.New("empty long URL value")
+	}
+
+	shortURL := shortURLGenerator(minShortURLLengthConst)
+	u := &URLItem{
+		ShortURLValue:    shortURL,
+		OriginalURLValue: longURLValue,
+		Next:             nil,
+	}
+
+	item := l.LinkedListStorage[userID]
+	if item == nil {
+		item = &LinkedListURLItem{}
+	}
+
+	if item.Head == nil {
+		item.Head = u
+	} else {
+		currentNode := item.Tail
+		currentNode.Next = u
+	}
+	item.Tail = u
+
+	l.LinkedListStorage[userID] = item
+
+	return shortURL, nil
+}
+
+// get original URL value by a short value from linked list storage.
+func (l UsersLinkedListMemoryStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
+	if strings.TrimSpace(shortURLValue) == "" {
+		return "", errors.New("empty short URL value")
+	}
+
+	for _, v := range l.LinkedListStorage {
+		currentNode := v.Head
+		if currentNode.ShortURLValue == shortURLValue {
+			return currentNode.OriginalURLValue, nil
+		}
+		if currentNode == nil {
+			continue
+		}
+		for currentNode.Next != nil {
+			if currentNode.ShortURLValue == shortURLValue {
+				return currentNode.OriginalURLValue, nil
+			}
+			currentNode = currentNode.Next
+		}
+	}
+	return "", nil
+}
+
+// get short URL value and original URL value pairs array created by user.
+func (l UsersLinkedListMemoryStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
+	items := l.LinkedListStorage[userID]
+
+	result := []UserExportType{}
+	if items == nil || items.Head == nil {
+		return result, nil
+	}
+
+	currntItem := items.Head
+	for currntItem != nil {
+		item := &UserExportType{
+			ShortURL:    currntItem.ShortURLValue,
+			OriginalURL: currntItem.OriginalURLValue,
+		}
+
+		if strings.TrimSpace(prefix) != "" {
+			item.ShortURL = prefix + "/" + item.ShortURL
+		}
+		result = append(result, *item)
+
+		currntItem = currntItem.Next
+	}
+
+	return result, nil
+}
+
+// group addition of short URL values to the linked list storage via api.
+//
+// items - array of BatchRequest
+// prefix - shortener service name
+// userID - user ID
+func (l UsersLinkedListMemoryStorage) PostAPIBatch(ctx context.Context, items *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error) {
+	list := l.LinkedListStorage[userID]
+	if list == nil {
+		list = &LinkedListURLItem{}
+	}
+
+	result := &BatchResponseArray{}
+	for _, v := range *items {
+		shortURL := shortURLGenerator(minShortURLLengthConst)
+		batchResponseItem := BatchResponse{
+			CorrelationID: v.CorrelationID,
+			ShortURL:      shortURL,
+		}
+		if strings.TrimSpace(prefix) != "" {
+			batchResponseItem.ShortURL = prefix + "/" + shortURL
+		}
+
+		item := &URLItem{
+			ShortURLValue:    shortURL,
+			OriginalURLValue: v.OriginalURL,
+			Next:             nil,
+		}
+
+		if list.Head == nil {
+			list.Head = item
+		} else {
+			currentNode := list.Tail
+			currentNode.Next = item
+		}
+		list.Tail = item
+		*result = append(*result, batchResponseItem)
+	}
+
+	l.LinkedListStorage[userID] = list
+	return result, nil
+}
+
+// interface plug
+func (l UsersLinkedListMemoryStorage) Ping(ctx context.Context) error {
+	return nil
+}
+
+// delete user URLs from linked list storage
+func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
+	userID := deletedURLs.UserIDValue
+	list := l.LinkedListStorage[userID]
+
+	if list == nil || list.Head == nil {
+		return nil
+	}
+
+	for _, deletedShortURL := range deletedURLs.ShortURLValues {
+		currentItem := list.Head
+		if currentItem.ShortURLValue == deletedShortURL {
+			if currentItem.Next == nil {
+				list.Head = nil
+				list.Tail = nil
+				break
+			}
+			list.Head = currentItem.Next
+			continue
+		}
+		for currentItem.Next != nil {
+			if currentItem.Next.ShortURLValue == deletedShortURL {
+				if currentItem.Next.Next != nil {
+					tempItem := currentItem.Next.Next
+					currentItem.Next = tempItem
+				} else {
+					currentItem.Next = nil
+					list.Tail = currentItem
+				}
+				break
+			}
+
+			currentItem = currentItem.Next
+		}
+	}
+
+	l.LinkedListStorage[userID] = list
+
 	return nil
 }

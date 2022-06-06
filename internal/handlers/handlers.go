@@ -24,7 +24,7 @@ import (
 	"net/http/pprof"
 )
 
-// hanler class.
+// type Handler - handler class.
 type (
 	Handler struct {
 		*chi.Mux
