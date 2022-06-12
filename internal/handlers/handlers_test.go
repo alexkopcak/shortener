@@ -72,24 +72,6 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
-		// {
-		// 	name:     "get value from repo",
-		// 	target:   baseURL + "/0",
-		// 	template: "%s",
-		// 	body:     "",
-		// 	method:   http.MethodGet,
-		// 	repo: storage.Dictionary{
-		// 		Items: map[string]string{
-		// 			"0": "http://abc.test/abc/abd",
-		// 		},
-		// 	},
-		// 	want: want{
-		// 		contentType: "",
-		// 		statusCode:  http.StatusTemporaryRedirect,
-		// 		body:        "",
-		// 		location:    "http://abc.test/abc/abd",
-		// 	},
-		// },
 		{
 			name:     "get value from empty repo",
 			target:   baseURL + "/0",
@@ -284,31 +266,14 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
-		// {
-		// 	name:     "delete URL",
-		// 	target:   baseURL + "/api/user/urls",
-		// 	template: "[\"%s\"]",
-		// 	body:     "abc",
-		// 	method:   http.MethodDelete,
-		// 	repo:     storage.Dictionary{},
-		// 	want: want{
-		// 		statusCode: http.StatusAccepted,
-		// 		body:       "",
-		// 		location:   "",
-		// 	},
-		// },
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			w := httptest.NewRecorder()
-			//d := storage.Dictionary{}
 			d, err := storage.NewDictionary(config.Config{})
 			require.NoError(t, err)
-
-			//d := storage.Dictionary
-			//d.Items = tt.repo.Items
 
 			if len(tt.repo.Items) > 0 {
 				for _, v := range tt.repo.Items {
@@ -326,8 +291,6 @@ func TestURLHandler(t *testing.T) {
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
-
-			//fmt.Println(&tt.repo)
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.location, result.Header.Get("Location"))
@@ -406,7 +369,6 @@ func TestCookie(t *testing.T) {
 					CookieAuthName: cookieAuthName,
 				}, dChan),
 			}
-			//fmt.Printf("request %v\n", request)
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
 			require.NotEmpty(t, result.Cookies(), "cookies field are empty")
