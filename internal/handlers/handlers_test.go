@@ -26,9 +26,9 @@ func TestURLHandler(t *testing.T) {
 
 	type want struct {
 		contentType string
-		statusCode  int
 		body        string
 		location    string
+		statusCode  int
 	}
 
 	tests := []struct {
@@ -310,7 +310,7 @@ func TestURLHandler(t *testing.T) {
 					aliasRequest := &struct {
 						LongURLValue string `json:"result,omitempty"`
 					}{}
-					err := json.Unmarshal(requestResult, aliasRequest)
+					err = json.Unmarshal(requestResult, aliasRequest)
 					require.NoError(t, err)
 					requestResult = []byte(aliasRequest.LongURLValue)
 				}
@@ -394,8 +394,8 @@ func TestCookie(t *testing.T) {
 
 func TestHandler_DeleteUserURLHandler(t *testing.T) {
 	type want struct {
-		statusCode int
 		body       string
+		statusCode int
 	}
 
 	tests := []struct {

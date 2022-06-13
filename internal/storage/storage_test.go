@@ -57,8 +57,8 @@ func TestDictionary_AddURL(t *testing.T) {
 
 func TestDictionary_GetURL(t *testing.T) {
 	type fields struct {
-		MinShortURLLength int
 		Items             map[string]string
+		MinShortURLLength int
 	}
 	type args struct {
 		shortURLValue string
@@ -119,10 +119,10 @@ func Test_shortURLGenerator(t *testing.T) {
 
 func TestDictionary_GetUserURL(t *testing.T) {
 	type fields struct {
-		MinShortURLLength int
 		Items             map[string]string
 		UserItems         map[int32][]string
 		fileStoragePath   string
+		MinShortURLLength int
 	}
 	type args struct {
 		prefix string
@@ -218,10 +218,10 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 		userID int32
 	}
 	tests := []struct {
+		want    *BatchResponseArray
 		name    string
 		fields  fields
 		args    args
-		want    *BatchResponseArray
 		wantErr bool
 	}{
 		{
@@ -276,8 +276,8 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 
 func TestProducerConsumer(t *testing.T) {
 	type args struct {
-		filename string
 		item     *ItemType
+		filename string
 	}
 	tests := []struct {
 		name    string
@@ -321,8 +321,8 @@ func TestProducerConsumer(t *testing.T) {
 
 func TestProducerErrors(t *testing.T) {
 	type args struct {
-		filename string
 		item     *ItemType
+		filename string
 	}
 	tests := []struct {
 		name    string
@@ -488,9 +488,9 @@ func TestDictionary_DeleteUserURL(t *testing.T) {
 		deletedURLs *DeletedShortURLValues
 	}
 	tests := []struct {
-		name    string
 		fields  fields
 		args    args
+		name    string
 		wantErr bool
 	}{
 		{
@@ -549,7 +549,7 @@ func TestDictionary_DeleteUserURL(t *testing.T) {
 
 			tt.args.deletedURLs.ShortURLValues = append(tt.args.deletedURLs.ShortURLValues, item.ShortURLValue)
 
-			if err := d.DeleteUserURL(tt.args.ctx, tt.args.deletedURLs); (err != nil) != tt.wantErr {
+			if err = d.DeleteUserURL(tt.args.ctx, tt.args.deletedURLs); (err != nil) != tt.wantErr {
 				t.Errorf("Dictionary.DeleteUserURL() error = %v, wantErr %v", err, tt.wantErr)
 			}
 
@@ -607,9 +607,9 @@ func TestDictionary_DeleteUserURLSecond(t *testing.T) {
 		deletedURLs *DeletedShortURLValues
 	}
 	tests := []struct {
-		name    string
 		fields  fields
 		args    args
+		name    string
 		wantErr bool
 	}{
 		{
@@ -651,9 +651,9 @@ func TestDictionary_Ping(t *testing.T) {
 		ctx context.Context
 	}
 	tests := []struct {
-		name    string
 		fields  fields
 		args    args
+		name    string
 		wantErr bool
 	}{
 		{
@@ -727,8 +727,8 @@ func TestLinkedList_GetURL(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		args args
 		want string
+		args args
 	}{
 		{
 			name: "get value",
@@ -804,8 +804,8 @@ func TestLinkedList_GetURL(t *testing.T) {
 func TestLinkedList_GetUserURL(t *testing.T) {
 	type args struct {
 		prefix       string
-		userID       int32
 		originalURL  string
+		userID       int32
 		emptyStorage bool
 	}
 	tests := []struct {
@@ -869,9 +869,9 @@ func TestLinedList_PostAPIBatch(t *testing.T) {
 		userID int32
 	}
 	tests := []struct {
+		want    *BatchResponseArray
 		name    string
 		args    args
-		want    *BatchResponseArray
 		wantErr bool
 	}{
 		{
