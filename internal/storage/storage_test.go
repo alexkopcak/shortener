@@ -149,6 +149,20 @@ func TestDictionary_GetUserURL(t *testing.T) {
 			want: []UserExportType{},
 		},
 		{
+			name: "get value with prefix from empty dictionary",
+			fields: fields{
+				MinShortURLLength: 5,
+				Items:             map[string]string{},
+				UserItems:         map[int32][]string{},
+				fileStoragePath:   "",
+			},
+			args: args{
+				prefix: "  http://localhost:8080  ",
+				userID: 0,
+			},
+			want: []UserExportType{},
+		},
+		{
 			name: "get value from dictionary",
 			fields: fields{
 				MinShortURLLength: 5,
@@ -301,6 +315,66 @@ func TestProducerConsumer(t *testing.T) {
 
 			assert.Equal(t, tt.args.item.LongURLValue, item.LongURLValue)
 			assert.Equal(t, tt.args.item.ShortURLValue, item.ShortURLValue)
+		})
+	}
+}
+
+func TestProducerErrors(t *testing.T) {
+	type args struct {
+		filename string
+		item     *ItemType
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			args: args{
+				filename: "///",
+				item:     &ItemType{},
+			},
+			name:    "bad file name",
+			wantErr: true,
+		},
+		{
+			args: args{
+				filename: "test",
+				item:     &ItemType{},
+			},
+			name:    "item is nil",
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer os.Remove(tt.args.filename)
+			if err := ProducerWrite(tt.args.filename, tt.args.item); (err != nil) != tt.wantErr {
+				t.Errorf("ProducerWrite() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+		})
+	}
+}
+
+func TestConsumerErrors(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		wantErr  bool
+	}{
+		{
+			filename: "\\///",
+			name:     "bad file name",
+			wantErr:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NewConsumer(tt.filename); (err != nil) != tt.wantErr {
+				t.Errorf("ProducerWrite() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
 		})
 	}
 }
@@ -489,17 +563,20 @@ func TestDictionary_DeleteUserURL(t *testing.T) {
 
 func TestDictionary_NewDictionaryWithStorage(t *testing.T) {
 	tests := []struct {
-		name    string
-		wantErr bool
+		name        string
+		fileStorage string
+		wantErr     bool
 	}{
 		{
-			name: "New Dictionary With Storage",
+			name:        "New Dictionary With Storage",
+			fileStorage: "localStorage.test",
+			wantErr:     false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := config.Config{
-				FileStoragePath: "localStorage.test",
+				FileStoragePath: tt.fileStorage,
 			}
 
 			defer os.Remove(cfg.FileStoragePath)
@@ -514,6 +591,7 @@ func TestDictionary_NewDictionaryWithStorage(t *testing.T) {
 			d, err := NewDictionary(cfg)
 			require.NoError(t, err)
 			assert.Len(t, d.(*Dictionary).Items, 1)
+
 		})
 	}
 }
@@ -638,29 +716,85 @@ func TestLinkedList_AddURL(t *testing.T) {
 }
 
 func TestLinkedList_GetURL(t *testing.T) {
-	type fields struct {
-		MinShortURLLength int
-		Items             map[string]string
+	type importItemType struct {
+		OriginalURLValue string
+		RemoveAfter      bool
+		UserID           int32
 	}
 	type args struct {
 		shortURLValue string
+		importedItem  []importItemType
 	}
 	tests := []struct {
-		name   string
-		fields fields
-		args   args
-		want   string
+		name string
+		args args
+		want string
 	}{
 		{
-			name:   "get value",
-			fields: fields{},
+			name: "get value",
+			args: args{
+				shortURLValue: "short URL Value1",
+				importedItem:  []importItemType{},
+			},
+		},
+		{
+			name: "get empty value",
+			args: args{
+				shortURLValue: "",
+				importedItem:  []importItemType{},
+			},
+		},
+		{
+			name: "get value, add some records before",
+			args: args{
+				shortURLValue: "",
+				importedItem: []importItemType{
+					{
+						OriginalURLValue: "original URL value 1",
+						RemoveAfter:      false,
+						UserID:           0,
+					},
+					{
+						OriginalURLValue: "original URL value 2",
+						RemoveAfter:      false,
+						UserID:           0,
+					},
+				},
+			},
+		},
+		{
+			name: "get empty value",
+			args: args{
+				shortURLValue: "",
+				importedItem: []importItemType{
+					{
+						OriginalURLValue: "original URL value 1",
+						RemoveAfter:      true,
+						UserID:           0,
+					},
+					{
+						OriginalURLValue: "original URL value 2",
+						RemoveAfter:      false,
+						UserID:           1,
+					},
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewLinkedListStorage()
-			ctx := context.Background()
-			if got, _ := d.GetURL(ctx, tt.args.shortURLValue); got != tt.want {
+
+			for _, v := range tt.args.importedItem {
+				val, err := d.AddURL(context.Background(), v.OriginalURLValue, v.UserID)
+				assert.NoError(t, err)
+				d.DeleteUserURL(context.Background(), &DeletedShortURLValues{
+					ShortURLValues: []string{val},
+					UserIDValue:    v.UserID,
+				})
+			}
+
+			if got, _ := d.GetURL(context.Background(), tt.args.shortURLValue); got != tt.want {
 				t.Errorf("Dictionary.GetURL() = %v, want %v", got, tt.want)
 			}
 		})
@@ -777,6 +911,144 @@ func TestLinedList_PostAPIBatch(t *testing.T) {
 			assert.Equal(t, (*tt.args.items)[0].CorrelationID, (*got)[0].CorrelationID)
 			assert.Equal(t, (*tt.args.items)[0].OriginalURL, originalURL)
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestUsersLinkedListMemoryStorage_DeleteUserURL(t *testing.T) {
+	type importURLvalue struct {
+		OriginalURLValue string
+		DeleteAfter      bool
+		UserID           int32
+	}
+
+	type fields struct {
+		LinkedListStorage map[int32]*LinkedListURLItem
+	}
+	type args struct {
+		deletedURLs       *DeletedShortURLValues
+		importedURLValues []importURLvalue
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "delete from empty storage",
+			fields: fields{
+				LinkedListStorage: map[int32]*LinkedListURLItem{},
+			},
+			args: args{
+				deletedURLs: &DeletedShortURLValues{
+					ShortURLValues: []string{
+						"short URL 1",
+					},
+					UserIDValue: 0,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "delete all from storage",
+			fields: fields{
+				LinkedListStorage: map[int32]*LinkedListURLItem{},
+			},
+			args: args{
+				deletedURLs: &DeletedShortURLValues{},
+				importedURLValues: []importURLvalue{
+					{
+						OriginalURLValue: "original URL value 1",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 2",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 3",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "delete all from storage except first",
+			fields: fields{
+				LinkedListStorage: map[int32]*LinkedListURLItem{},
+			},
+			args: args{
+				deletedURLs: &DeletedShortURLValues{},
+				importedURLValues: []importURLvalue{
+					{
+						OriginalURLValue: "original URL value 1",
+						DeleteAfter:      false,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 2",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 3",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "delete all from storage except last",
+			fields: fields{
+				LinkedListStorage: map[int32]*LinkedListURLItem{},
+			},
+			args: args{
+				deletedURLs: &DeletedShortURLValues{},
+				importedURLValues: []importURLvalue{
+					{
+						OriginalURLValue: "original URL value 1",
+						DeleteAfter:      false,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 2",
+						DeleteAfter:      false,
+						UserID:           1,
+					},
+					{
+						OriginalURLValue: "original URL value 3",
+						DeleteAfter:      true,
+						UserID:           1,
+					},
+				},
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := UsersLinkedListMemoryStorage{
+				LinkedListStorage: tt.fields.LinkedListStorage,
+			}
+			for _, v := range tt.args.importedURLValues {
+				val, err := l.AddURL(context.Background(), v.OriginalURLValue, v.UserID)
+				require.NoError(t, err)
+				if v.DeleteAfter {
+					tt.args.deletedURLs.ShortURLValues = append(tt.args.deletedURLs.ShortURLValues, val)
+					tt.args.deletedURLs.UserIDValue = v.UserID
+				}
+			}
+
+			if err := l.DeleteUserURL(context.Background(), tt.args.deletedURLs); (err != nil) != tt.wantErr {
+				t.Errorf("UsersLinkedListMemoryStorage.DeleteUserURL() error = %v, wantErr %v", err, tt.wantErr)
+			}
 		})
 	}
 }
