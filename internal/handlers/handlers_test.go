@@ -371,6 +371,7 @@ func TestCookie(t *testing.T) {
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
+			defer result.Body.Close()
 			require.NotEmpty(t, result.Cookies(), "cookies field are empty")
 
 			cookie := result.Cookies()
