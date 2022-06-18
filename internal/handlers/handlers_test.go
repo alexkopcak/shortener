@@ -26,9 +26,9 @@ func TestURLHandler(t *testing.T) {
 
 	type want struct {
 		contentType string
-		statusCode  int
 		body        string
 		location    string
+		statusCode  int
 	}
 
 	tests := []struct {
@@ -310,7 +310,7 @@ func TestURLHandler(t *testing.T) {
 					aliasRequest := &struct {
 						LongURLValue string `json:"result,omitempty"`
 					}{}
-					err := json.Unmarshal(requestResult, aliasRequest)
+					err = json.Unmarshal(requestResult, aliasRequest)
 					require.NoError(t, err)
 					requestResult = []byte(aliasRequest.LongURLValue)
 				}
@@ -371,9 +371,99 @@ func TestCookie(t *testing.T) {
 			}
 			h.Handler.ServeHTTP(w, request)
 			result := w.Result()
+			defer result.Body.Close()
 			require.NotEmpty(t, result.Cookies(), "cookies field are empty")
+
+			cookie := result.Cookies()
+
+			request2 := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
+			for _, v := range cookie {
+				request2.AddCookie(v)
+			}
+
+			h.Handler.ServeHTTP(w, request2)
+			result = w.Result()
+
+			require.EqualValues(t, cookie, result.Cookies())
+
 			result.Body.Close()
 		},
 		)
+	}
+}
+
+func TestHandler_DeleteUserURLHandler(t *testing.T) {
+	type want struct {
+		body       string
+		statusCode int
+	}
+
+	tests := []struct {
+		name     string
+		target   string
+		template string
+		body     string
+		method   string
+		repo     storage.Dictionary
+		want     want
+	}{
+		{
+			name:     "delete User URL Handler",
+			target:   baseURL + "/api/user/urls",
+			template: "[\"short URL1\",\"short URL2\"]",
+			method:   http.MethodDelete,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				statusCode: http.StatusAccepted,
+				body:       "",
+			},
+		},
+		{
+			name:     "delete User URL Handler, bad body",
+			target:   baseURL + "/api/user/urls",
+			template: "[\"short URL1\",\"short URL2\"",
+			method:   http.MethodDelete,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				statusCode: http.StatusBadRequest,
+				body:       "unexpected EOF\n",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.template)))
+			w := httptest.NewRecorder()
+			d, err := storage.NewDictionary(config.Config{})
+			require.NoError(t, err)
+
+			dChan := make(chan *storage.DeletedShortURLValues, 1)
+
+			h := http.Server{
+				Handler: URLHandler(d, config.Config{
+					BaseURL:        baseURL,
+					SecretKey:      secretKey,
+					CookieAuthName: cookieAuthName,
+				}, dChan),
+			}
+
+			h.Handler.ServeHTTP(w, request)
+
+			close(dChan)
+
+			result := w.Result()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			requestResult, err := ioutil.ReadAll(result.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want.body, string(requestResult))
+			err = result.Body.Close()
+			require.NoError(t, err)
+		})
 	}
 }

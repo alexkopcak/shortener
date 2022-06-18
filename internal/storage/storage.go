@@ -225,7 +225,7 @@ func (ps *PostgresStorage) PostAPIBatch(
 			batchResponseItem.ShortURL = prefix + "/" + shortURLValue
 		}
 
-		_, err := tx.Exec(ctx,
+		_, err = tx.Exec(ctx,
 			"INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3);",
 			userID,
 			shortURLValue,
@@ -446,9 +446,9 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 
 // linked list storage item.
 type URLItem struct {
+	Next             *URLItem
 	ShortURLValue    string
 	OriginalURLValue string
-	Next             *URLItem
 }
 
 // linked list storage implementation.

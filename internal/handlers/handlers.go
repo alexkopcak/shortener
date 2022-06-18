@@ -28,9 +28,9 @@ import (
 type (
 	Handler struct {
 		*chi.Mux
+		dChannel chan *storage.DeletedShortURLValues
 		Repo     storage.Storage
 		Cfg      config.Config
-		dChannel chan *storage.DeletedShortURLValues
 	}
 
 	key uint64
@@ -325,7 +325,7 @@ func (h *Handler) PostAPIBatchHandler() http.HandlerFunc {
 
 		batchRequest := &storage.BatchRequestArray{}
 
-		if err := json.Unmarshal(bodyRaw, batchRequest); err != nil {
+		if err = json.Unmarshal(bodyRaw, batchRequest); err != nil {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
@@ -367,7 +367,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			LongURLValue string `json:"url,omitempty" valid:"url"`
 		}{}
 
-		if err := json.Unmarshal(bodyRaw, aliasRequest); err != nil {
+		if err = json.Unmarshal(bodyRaw, aliasRequest); err != nil {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
