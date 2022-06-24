@@ -7,4 +7,5 @@ type Config struct {
 	SecretKey          string `env:"SHORTENER_SECRET_KEY" envDefault:"We learn Go language"`
 	CookieAuthName     string `env:"COOKIE_ATUH_NAME" envDefault:"shortenerId"`
 	DBConnectionString string `env:"DATABASE_DSN" envDefault:"postgres://postgres:mypassword@localhost:5432/shortener_db"`
+	EnableHTTPS        bool   `env:"ENABLE_HTTPS" envDefault:"false"`
 }
