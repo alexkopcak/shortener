@@ -50,14 +50,18 @@ func Run() error {
 	cfg.DBConnectionString = *dbConnectionString
 	cfg.EnableHTTPS = *enableHTTPS
 
-	if cfg.EnableHTTPS {
-		urlValue, err := url.Parse(cfg.BaseURL)
-		if err != nil {
-			return err
-		}
-		urlValue.Scheme = "https"
-		cfg.BaseURL = urlValue.String()
+	// Parse Base URL address
+	urlValue, err := url.Parse(cfg.BaseURL)
+	if err != nil {
+		return err
 	}
+
+	if cfg.EnableHTTPS {
+		urlValue.Scheme = "https"
+	} else {
+		urlValue.Scheme = "http"
+	}
+	cfg.BaseURL = urlValue.String()
 
 	wg := &sync.WaitGroup{}
 	dChannel := make(chan *storage.DeletedShortURLValues)
