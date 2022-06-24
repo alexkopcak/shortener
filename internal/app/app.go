@@ -13,8 +13,8 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -51,8 +51,12 @@ func Run() error {
 	cfg.EnableHTTPS = *enableHTTPS
 
 	if cfg.EnableHTTPS {
-		addr := cfg.BaseURL
-		cfg.BaseURL = strings.Replace(addr, "http://", "https://", 1)
+		urlValue, err := url.Parse(cfg.BaseURL)
+		if err != nil {
+			return err
+		}
+		urlValue.Scheme = "https"
+		cfg.BaseURL = urlValue.String()
 	}
 
 	wg := &sync.WaitGroup{}
