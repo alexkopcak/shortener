@@ -8,12 +8,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
-	"flag"
 	"io/ioutil"
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"sync"
 	"time"
@@ -21,7 +19,6 @@ import (
 	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/alexkopcak/shortener/internal/handlers"
 	"github.com/alexkopcak/shortener/internal/storage"
-	"github.com/caarlos0/env"
 )
 
 const (
@@ -29,39 +26,62 @@ const (
 	keyFile  = "localhost.key"
 )
 
-func Run() error {
-	// Env configuration
-	var cfg config.Config
-	if err := env.Parse(&cfg); err != nil {
-		return err
-	}
-	// flags configuration
-	addrPointer := flag.String("a", cfg.ServerAddr, "Server address, example ip:port")
-	baseAddrPointer := flag.String("b", cfg.BaseURL, "Base URL address, example http://127.0.0.1:8080")
-	fileStoragePathPointer := flag.String("f", cfg.FileStoragePath, "File storage path")
-	dbConnectionString := flag.String("d", cfg.DBConnectionString, "DB Connection string")
-	enableHTTPS := flag.Bool("s", cfg.EnableHTTPS, "Enable HTTPS")
+func Run(cfg config.Config) error {
+	// // check config file os.Env
+	// cfgFileName := os.Getenv(envConfigFile)
 
-	flag.Parse()
+	// // env configuration
+	// cfg := config.NewConfig(cfgFileName)
 
-	cfg.BaseURL = *baseAddrPointer
-	cfg.ServerAddr = *addrPointer
-	cfg.FileStoragePath = *fileStoragePathPointer
-	cfg.DBConnectionString = *dbConnectionString
-	cfg.EnableHTTPS = *enableHTTPS
+	// if err := env.Parse(&cfg); err != nil {
+	// 	return err
+	// }
+	// // flags configuration
+	// flag.StringVar(&cfg.ServerAddr, "a", cfg.ServerAddr, "Server address, example ip:port")
+	// flag.StringVar(&cfg.BaseURL, "b", cfg.BaseURL, "Base URL address, example http://127.0.0.1:8080")
+	// flag.StringVar(&cfg.FileStoragePath, "f", cfg.FileStoragePath, "File storage path")
+	// flag.StringVar(&cfg.DBConnectionString, "d", cfg.DBConnectionString, "DB connection string")
+	// flag.BoolVar(&cfg.EnableHTTPS, "s", cfg.EnableHTTPS, "Enable HTTPS")
+	// flag.StringVar(&cfg.ConfigPath, "c", cfg.ConfigPath, "Config file path")
+	// flag.StringVar(&cfg.ConfigPath, "config", cfg.ConfigPath, "Config file path")
 
-	// Parse Base URL address
-	urlValue, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		return err
-	}
+	// flag.Parse()
 
-	if cfg.EnableHTTPS {
-		urlValue.Scheme = "https"
-	} else {
-		urlValue.Scheme = "http"
-	}
-	cfg.BaseURL = urlValue.String()
+	// if strings.TrimSpace(cfg.ConfigPath) != "" && cfgFileName == "" {
+	// 	name, err := os.Executable()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	var procAttr os.ProcAttr
+	// 	procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+	// 	procAttr.Env = []string{fmt.Sprintf("%s=%s", envConfigFile, cfg.ConfigPath)}
+
+	// 	proc, err := os.StartProcess(name, os.Args, &procAttr)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	_, err = proc.Wait()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// 	return nil
+	// }
+
+	// fmt.Println(cfg)
+	// // Parse Base URL address
+	// urlValue, err := url.Parse(cfg.BaseURL)
+	// if err != nil {
+	// 	return err
+	// }
+
+	// if cfg.EnableHTTPS {
+	// 	urlValue.Scheme = "https"
+	// } else {
+	// 	urlValue.Scheme = "http"
+	// }
+	// cfg.BaseURL = urlValue.String()
 
 	wg := &sync.WaitGroup{}
 	dChannel := make(chan *storage.DeletedShortURLValues)
