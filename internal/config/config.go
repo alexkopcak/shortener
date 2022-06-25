@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 )
 
@@ -25,29 +26,32 @@ func (c *Config) SetDefaultValues() {
 	c.EnableHTTPS = false
 }
 
-func NewConfig(configFileName string) Config {
+func NewConfig(configFileName string) (Config, error) {
 	cfg := Config{}
 	cfg.SetDefaultValues()
 
 	configFileStat, err := os.Stat(configFileName)
+	if errors.Is(err, os.ErrNotExist) {
+		return cfg, nil
+	}
 	if err != nil {
-		return cfg
+		return cfg, err
 	}
 
 	if !configFileStat.Mode().IsRegular() {
-		return cfg
+		return cfg, nil
 	}
 
 	file, err := os.Open(configFileName)
 	if err != nil {
-		return cfg
+		return cfg, err
 	}
 	defer file.Close()
 
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&cfg)
 	if err != nil {
-		return cfg
+		return cfg, err
 	}
-	return cfg
+	return cfg, nil
 }

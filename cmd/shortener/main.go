@@ -29,7 +29,10 @@ func main() {
 	cfgFileName := os.Getenv(envConfigFile)
 
 	// env configuration
-	cfg := config.NewConfig(cfgFileName)
+	cfg, err := config.NewConfig(cfgFileName)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	if err := env.Parse(&cfg); err != nil {
 		log.Fatal(err)
