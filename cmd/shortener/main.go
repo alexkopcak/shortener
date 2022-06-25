@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/url"
 	"os"
 	"strings"
 
@@ -34,7 +33,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if err := env.Parse(&cfg); err != nil {
+	if err = env.Parse(&cfg); err != nil {
 		log.Fatal(err)
 	}
 	// flags configuration
@@ -48,9 +47,15 @@ func main() {
 
 	flag.Parse()
 
+	// check Base URL scheme
+	if err = cfg.CheckURLvalueScheme(); err != nil {
+		log.Fatal(err)
+	}
+
 	// if config file exsist, but not loaded
 	if strings.TrimSpace(cfg.ConfigPath) != "" &&
 		strings.TrimSpace(cfgFileName) == "" {
+
 		name, err := os.Executable()
 		if err != nil {
 			log.Fatal(err)
@@ -71,19 +76,6 @@ func main() {
 		}
 		return
 	}
-
-	// Parse Base URL address
-	urlValue, err := url.Parse(cfg.BaseURL)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if cfg.EnableHTTPS {
-		urlValue.Scheme = "https"
-	} else {
-		urlValue.Scheme = "http"
-	}
-	cfg.BaseURL = urlValue.String()
 
 	fmt.Println("Build version:", buildVersion)
 	fmt.Println("Build date:", buildDate)

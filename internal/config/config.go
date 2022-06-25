@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"net/url"
 	"os"
 )
 
@@ -54,4 +55,21 @@ func NewConfig(configFileName string) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func (c *Config) CheckURLvalueScheme() error {
+	// Parse Base URL address
+	urlValue, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return err
+	}
+
+	if c.EnableHTTPS {
+		urlValue.Scheme = "https"
+	} else {
+		urlValue.Scheme = "http"
+	}
+	c.BaseURL = urlValue.String()
+
+	return nil
 }
