@@ -53,10 +53,9 @@ func main() {
 	}
 
 	// if config file exsist, but not loaded
-	if strings.TrimSpace(cfg.ConfigPath) != "" &&
-		strings.TrimSpace(cfgFileName) == "" {
-
-		name, err := os.Executable()
+	if strings.TrimSpace(cfg.ConfigPath) != "" && strings.TrimSpace(cfgFileName) == "" {
+		var name string
+		name, err = os.Executable()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -65,7 +64,8 @@ func main() {
 		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
 		procAttr.Env = []string{fmt.Sprintf("%s=%s", envConfigFile, cfg.ConfigPath)}
 
-		proc, err := os.StartProcess(name, os.Args, &procAttr)
+		var proc *os.Process
+		proc, err = os.StartProcess(name, os.Args, &procAttr)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -81,5 +81,7 @@ func main() {
 	fmt.Println("Build date:", buildDate)
 	fmt.Println("Build commit:", buildCommit)
 
-	log.Fatal(app.Run(cfg))
+	if err = app.Run(cfg); err != nil {
+		log.Fatal(err)
+	}
 }

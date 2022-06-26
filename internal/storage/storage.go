@@ -53,6 +53,7 @@ type Storage interface {
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
 	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
+	Close(ctx context.Context) error
 }
 
 // implements the choice of storage depending on the configuration, returns the storage interface.
@@ -287,6 +288,11 @@ func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *Delet
 	return err
 }
 
+// close postgres connection.
+func (ps *PostgresStorage) Close(ctx context.Context) error {
+	return ps.db.Close(ctx)
+}
+
 // memory storage implementation.
 type Dictionary struct {
 	Items           map[string]string
@@ -441,6 +447,11 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 		a[len(a)-1] = ""
 		d.UserItems[deletedURLs.UserIDValue] = a[:len(a)-1]
 	}
+	return nil
+}
+
+// close connection plug.
+func (d *Dictionary) Close(ctx context.Context) error {
 	return nil
 }
 
@@ -637,5 +648,10 @@ func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deleted
 
 	l.LinkedListStorage[userID] = list
 
+	return nil
+}
+
+// close connection plug.
+func (l UsersLinkedListMemoryStorage) Close(ctx context.Context) error {
 	return nil
 }
