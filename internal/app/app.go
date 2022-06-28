@@ -89,7 +89,7 @@ func Run(cfg config.Config) error {
 
 	<-iddleConnsClosed
 
-	err = repository.Close(ctx)
+	err = repository.Close()
 
 	close(sigint)
 	close(dChannel)

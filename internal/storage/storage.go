@@ -3,6 +3,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"sync"
 
@@ -15,7 +16,6 @@ import (
 
 	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/jackc/pgtype"
-	"github.com/jackc/pgx/v4"
 )
 
 const (
@@ -53,7 +53,7 @@ type Storage interface {
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
 	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
-	Close(ctx context.Context) error
+	Close() error
 }
 
 // implements the choice of storage depending on the configuration, returns the storage interface.
@@ -66,31 +66,32 @@ func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *Del
 
 // postgres storage implenetation.
 type PostgresStorage struct {
-	db            *pgx.Conn
+	db            *sql.DB
 	WaitGroup     *sync.WaitGroup
 	DeleteChannel chan *DeletedShortURLValues
 }
 
 // creates a new postgres storage object.
 func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
-	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
+	ps, err := sql.Open("pgx", cfg.DBConnectionString)
+	//ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
 	if err != nil {
 		return NewDictionary(cfg)
 	}
 
 	var cnt int
-	err = ps.QueryRow(context.Background(), "SELECT COUNT(*) FROM pg_database WHERE datname = 'shortener_db';").Scan(&cnt)
+	err = ps.QueryRowContext(context.Background(), "SELECT COUNT(*) FROM pg_database WHERE datname = 'shortener_db';").Scan(&cnt)
 
 	if cnt != 1 || err != nil {
-		_, err = ps.Exec(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
+		_, err = ps.ExecContext(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
 		if err != nil {
 			return NewDictionary(cfg)
 		}
 	}
 
-	_, err = ps.Exec(context.Background(), "SELECT * FROM shortener LIMIT 1;")
+	_, err = ps.ExecContext(context.Background(), "SELECT * FROM shortener LIMIT 1;")
 	if err != nil {
-		_, err = ps.Exec(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
+		_, err = ps.ExecContext(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
 		if err != nil {
 			return NewDictionary(cfg)
 		}
@@ -114,7 +115,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 	}
 
 	shortURLvalue := shortURLGenerator(minShortURLLengthConst)
-	cTag, err := ps.db.Exec(ctx,
+	cTag, err := ps.db.ExecContext(ctx,
 		"INSERT INTO shortener "+
 			"(user_id, short_url, original_url) "+
 			"VALUES ($1, $2, $3) "+
@@ -126,9 +127,9 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 		return "", err
 	}
 
-	if cTag.RowsAffected() == 0 {
+	if cnt, _ := cTag.RowsAffected(); cnt == 0 {
 		var shortURL string
-		err = ps.db.QueryRow(ctx,
+		err = ps.db.QueryRowContext(ctx,
 			"SELECT short_url "+
 				"FROM shortener "+
 				"WHERE user_id = $1 AND original_url = $2 ;",
@@ -148,7 +149,7 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 	var longURL string
 	var deletedAt *time.Time
 
-	err := ps.db.QueryRow(ctx,
+	err := ps.db.QueryRowContext(ctx,
 		"SELECT original_url, deleted_at "+
 			"FROM shortener "+
 			"WHERE short_url = $1 ;",
@@ -167,7 +168,7 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 // get short URL value and original URL value pairs array created by user (userID)
 func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
-	rows, err := ps.db.Query(ctx,
+	rows, err := ps.db.QueryContext(ctx,
 		"SELECT short_url, original_url "+
 			"FROM shortener "+
 			"WHERE user_id = $1 ;",
@@ -210,11 +211,11 @@ func (ps *PostgresStorage) PostAPIBatch(
 		return result, errors.New("db is nil")
 	}
 
-	tx, err := ps.db.Begin(ctx)
+	tx, err := ps.db.BeginTx(ctx, nil)
 	if err != nil {
 		return result, err
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback()
 
 	for _, v := range *items {
 		batchResponseItem := BatchResponse{}
@@ -226,7 +227,7 @@ func (ps *PostgresStorage) PostAPIBatch(
 			batchResponseItem.ShortURL = prefix + "/" + shortURLValue
 		}
 
-		_, err = tx.Exec(ctx,
+		_, err = tx.ExecContext(ctx,
 			"INSERT INTO shortener (user_id, short_url, original_url) VALUES ($1, $2, $3);",
 			userID,
 			shortURLValue,
@@ -237,7 +238,7 @@ func (ps *PostgresStorage) PostAPIBatch(
 		}
 		*result = append(*result, batchResponseItem)
 	}
-	err = tx.Commit(ctx)
+	err = tx.Commit()
 	if err != nil {
 		return &BatchResponseArray{}, err
 	}
@@ -246,7 +247,7 @@ func (ps *PostgresStorage) PostAPIBatch(
 
 // simple test database postgres connection.
 func (ps *PostgresStorage) Ping(ctx context.Context) error {
-	err := ps.db.Ping(ctx)
+	err := ps.db.PingContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -284,13 +285,13 @@ func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *Delet
 		return err
 	}
 
-	_, err = ps.db.Exec(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", deletedURLs.UserIDValue, idsArray)
+	_, err = ps.db.ExecContext(ctx, "UPDATE shortener SET deleted_at = now() WHERE user_id = $1 and short_url = ANY($2);", deletedURLs.UserIDValue, idsArray)
 	return err
 }
 
 // close postgres connection.
-func (ps *PostgresStorage) Close(ctx context.Context) error {
-	return ps.db.Close(ctx)
+func (ps *PostgresStorage) Close() error {
+	return ps.db.Close()
 }
 
 // memory storage implementation.
@@ -451,7 +452,7 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 }
 
 // close connection plug.
-func (d *Dictionary) Close(ctx context.Context) error {
+func (d *Dictionary) Close() error {
 	return nil
 }
 
@@ -652,6 +653,6 @@ func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deleted
 }
 
 // close connection plug.
-func (l UsersLinkedListMemoryStorage) Close(ctx context.Context) error {
+func (l UsersLinkedListMemoryStorage) Close() error {
 	return nil
 }
