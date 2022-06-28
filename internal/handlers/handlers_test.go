@@ -590,21 +590,21 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		target         string
-		correlation_id string
-		original_url   string
-		method         string
-		repo           storage.Dictionary
-		want           want
+		name          string
+		target        string
+		correlationID string
+		originalURL   string
+		method        string
+		repo          storage.Dictionary
+		want          want
 	}{
 		{
-			name:           "set batch values with api",
-			target:         baseURL + "/api/shorten/batch",
-			correlation_id: "1",
-			original_url:   "http:\\test.tst",
-			method:         http.MethodPost,
-			repo:           storage.Dictionary{},
+			name:          "set batch values with api",
+			target:        baseURL + "/api/shorten/batch",
+			correlationID: "1",
+			originalURL:   "http:\\test.tst",
+			method:        http.MethodPost,
+			repo:          storage.Dictionary{},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
@@ -616,8 +616,8 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			item := storage.BatchRequestArray{
 				storage.BatchRequest{
-					CorrelationID: tt.correlation_id,
-					OriginalURL:   tt.original_url,
+					CorrelationID: tt.correlationID,
+					OriginalURL:   tt.originalURL,
 				},
 			}
 			body, err := json.Marshal(item)

@@ -2,18 +2,13 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
-	"log"
 	"math/rand"
 	"os"
 	"reflect"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1058,101 +1053,101 @@ func TestUsersLinkedListMemoryStorage_DeleteUserURL(t *testing.T) {
 	}
 }
 
-func NewMock() (*sql.DB, sqlmock.Sqlmock) {
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		log.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
-	}
-	return db, mock
-}
+// func NewMock() (*sql.DB, sqlmock.Sqlmock) {
+// 	db, mock, err := sqlmock.New()
+// 	if err != nil {
+// 		log.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+// 	}
+// 	return db, mock
+// }
 
-type tableModel struct {
-	Stamp       *time.Time
-	ShortURL    string
-	OriginalURL string
-	ID          int32
-}
+// type tableModel struct {
+// 	Stamp       *time.Time
+// 	ShortURL    string
+// 	OriginalURL string
+// 	ID          int32
+// }
 
-func TestPostgres_GetURL(t *testing.T) {
+// func TestPostgres_GetURL(t *testing.T) {
 
-	var i = &tableModel{
-		ShortURL:    "shortURL",
-		OriginalURL: "http://test.tst",
-		Stamp:       nil,
-	}
+// 	var i = &tableModel{
+// 		ShortURL:    "shortURL",
+// 		OriginalURL: "http://test.tst",
+// 		Stamp:       nil,
+// 	}
 
-	db, mock := NewMock()
-	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+// 	db, mock := NewMock()
+// 	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
 
-	defer func() {
-		repo.Close()
-	}()
+// 	defer func() {
+// 		repo.Close()
+// 	}()
 
-	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
+// 	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
 
-	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
+// 	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
 
-	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
+// 	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
 
-	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
-	assert.NotNil(t, originalURL)
-	require.NoError(t, err)
-}
+// 	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
+// 	assert.NotNil(t, originalURL)
+// 	require.NoError(t, err)
+// }
 
-func TestPostgres_GetURLDeletedRecord(t *testing.T) {
-	var i = &tableModel{
-		ShortURL:    "shortURL",
-		OriginalURL: "http://test.tst",
-		Stamp:       nil,
-	}
+// func TestPostgres_GetURLDeletedRecord(t *testing.T) {
+// 	var i = &tableModel{
+// 		ShortURL:    "shortURL",
+// 		OriginalURL: "http://test.tst",
+// 		Stamp:       nil,
+// 	}
 
-	stamp := time.Now()
-	i.Stamp = &stamp
+// 	stamp := time.Now()
+// 	i.Stamp = &stamp
 
-	db, mock := NewMock()
-	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+// 	db, mock := NewMock()
+// 	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
 
-	defer func() {
-		repo.Close()
-	}()
+// 	defer func() {
+// 		repo.Close()
+// 	}()
 
-	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
+// 	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
 
-	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
+// 	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
 
-	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
+// 	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
 
-	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
-	assert.NotNil(t, originalURL)
-	require.Error(t, err)
-}
+// 	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
+// 	assert.NotNil(t, originalURL)
+// 	require.Error(t, err)
+// }
 
-func TestPostgres_GetUserURL(t *testing.T) {
-	var i = &tableModel{
-		ID:          1,
-		ShortURL:    "shortURL",
-		OriginalURL: "http://test.tst",
-	}
+// func TestPostgres_GetUserURL(t *testing.T) {
+// 	var i = &tableModel{
+// 		ID:          1,
+// 		ShortURL:    "shortURL",
+// 		OriginalURL: "http://test.tst",
+// 	}
 
-	db, mock := NewMock()
-	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+// 	db, mock := NewMock()
+// 	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
 
-	defer func() {
-		repo.Close()
-	}()
+// 	defer func() {
+// 		repo.Close()
+// 	}()
 
-	query := "SELECT short_url, original_url " +
-		"FROM shortener " +
-		"WHERE user_id \\= \\$1 ;"
+// 	query := "SELECT short_url, original_url " +
+// 		"FROM shortener " +
+// 		"WHERE user_id \\= \\$1 ;"
 
-	rows := sqlmock.NewRows([]string{"short_url", "original_url"}).AddRow(i.ShortURL, i.OriginalURL)
+// 	rows := sqlmock.NewRows([]string{"short_url", "original_url"}).AddRow(i.ShortURL, i.OriginalURL)
 
-	mock.ExpectQuery(query).WithArgs(i.ID).WillReturnRows(rows)
+// 	mock.ExpectQuery(query).WithArgs(i.ID).WillReturnRows(rows)
 
-	result, err := repo.GetUserURL(context.Background(), "prefix", i.ID)
-	assert.NotNil(t, result)
-	require.NoError(t, err)
-}
+// 	result, err := repo.GetUserURL(context.Background(), "prefix", i.ID)
+// 	assert.NotNil(t, result)
+// 	require.NoError(t, err)
+// }
 
 // func TestPostgres_AddURL(t *testing.T) {
 // 	var i = &tableModel{
