@@ -3,8 +3,13 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"flag"
+	"fmt"
 	"net/url"
 	"os"
+	"strings"
+
+	"github.com/caarlos0/env"
 )
 
 type Config struct {
@@ -18,6 +23,10 @@ type Config struct {
 	EnableHTTPS        bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 }
 
+const (
+	envConfigFile = "ENV_CONFIG_FILE"
+)
+
 func (c *Config) SetDefaultValues() {
 	c.ServerAddr = "localhost:8080"
 	c.BaseURL = "http://localhost:8080"
@@ -27,11 +36,41 @@ func (c *Config) SetDefaultValues() {
 	c.EnableHTTPS = false
 }
 
-func NewConfig(configFileName string) (Config, error) {
+func NewConfig() (Config, error) {
 	cfg := Config{}
 	cfg.SetDefaultValues()
 
-	configFileStat, err := os.Stat(configFileName)
+	// get configuration from config file
+	cfg, err := GetConfigurationFromFile(cfg)
+	if err != nil {
+		return cfg, err
+	}
+
+	// get configuration from env variables
+	if err = env.Parse(&cfg); err != nil {
+		return cfg, err
+	}
+
+	// flags configuration
+	cfg.GetFlagConfiguration()
+
+	// check Base URL scheme
+	if err = cfg.CheckURLvalueScheme(); err != nil {
+		return cfg, err
+	}
+
+	if err = cfg.ConfigFileExsistButNotLoaded(); err != nil {
+		return cfg, err
+	}
+
+	return cfg, err
+}
+
+func GetConfigurationFromFile(cfg Config) (Config, error) {
+	// check config file os.Env
+	cfgFileName := os.Getenv(envConfigFile)
+
+	configFileStat, err := os.Stat(cfgFileName)
 	if errors.Is(err, os.ErrNotExist) {
 		return cfg, nil
 	}
@@ -43,7 +82,7 @@ func NewConfig(configFileName string) (Config, error) {
 		return cfg, nil
 	}
 
-	file, err := os.Open(configFileName)
+	file, err := os.Open(cfgFileName)
 	if err != nil {
 		return cfg, err
 	}
@@ -71,5 +110,46 @@ func (c *Config) CheckURLvalueScheme() error {
 	}
 	c.BaseURL = urlValue.String()
 
+	return nil
+}
+
+func (c *Config) GetFlagConfiguration() {
+	// flags configuration
+	flag.StringVar(&c.ServerAddr, "a", c.ServerAddr, "Server address, example ip:port")
+	flag.StringVar(&c.BaseURL, "b", c.BaseURL, "Base URL address, example http://127.0.0.1:8080")
+	flag.StringVar(&c.FileStoragePath, "f", c.FileStoragePath, "File storage path")
+	flag.StringVar(&c.DBConnectionString, "d", c.DBConnectionString, "DB connection string")
+	flag.BoolVar(&c.EnableHTTPS, "s", c.EnableHTTPS, "Enable HTTPS")
+	flag.StringVar(&c.ConfigPath, "c", c.ConfigPath, "Config file path")
+	flag.StringVar(&c.ConfigPath, "config", c.ConfigPath, "Config file path")
+
+	flag.Parse()
+}
+
+func (c *Config) ConfigFileExsistButNotLoaded() error {
+	// if config file exsist, but not loaded
+	if strings.TrimSpace(c.ConfigPath) != "" && strings.TrimSpace(os.Getenv(envConfigFile)) == "" {
+		var name string
+		name, err := os.Executable()
+		if err != nil {
+			return err
+		}
+
+		var procAttr os.ProcAttr
+		procAttr.Files = []*os.File{os.Stdin, os.Stdout, os.Stderr}
+		procAttr.Env = []string{fmt.Sprintf("%s=%s", envConfigFile, c.ConfigPath)}
+
+		var proc *os.Process
+		proc, err = os.StartProcess(name, os.Args, &procAttr)
+		if err != nil {
+			return err
+		}
+
+		_, err = proc.Wait()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 	return nil
 }

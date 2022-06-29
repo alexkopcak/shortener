@@ -49,7 +49,7 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// create handler object and set handlers endpoints.
+// URLHandler create handler object and set handlers endpoints.
 func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
 		Mux:      chi.NewMux(),

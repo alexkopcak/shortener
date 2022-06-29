@@ -33,7 +33,6 @@ const (
 func Run(cfg config.Config) error {
 	wg := &sync.WaitGroup{}
 	dChannel := make(chan *storage.DeletedShortURLValues)
-	ctx := context.Background()
 
 	// Repository
 	repository, err := storage.InitializeStorage(cfg, wg, dChannel)
@@ -57,7 +56,7 @@ func Run(cfg config.Config) error {
 	go func() {
 		<-sigint
 
-		if err = server.Shutdown(ctx); err != nil {
+		if err = server.Shutdown(context.Background()); err != nil {
 			log.Printf("HTTP server Shutdown: %v", err)
 		}
 

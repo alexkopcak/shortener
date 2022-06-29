@@ -28,13 +28,13 @@ var (
 	ErrNotExistRecord  = errors.New("record not exist")     // record not exists
 )
 
-// type represents a structure from an array of ShortURLValues to be removed and User ID.
+// type DeletedShortURLValues represents a structure from an array of ShortURLValues to be removed and User ID.
 type DeletedShortURLValues struct {
 	ShortURLValues []string
 	UserIDValue    int32
 }
 
-// generates a random string value consisting of n characters.
+// func shortURLGenerator generates a random string value consisting of n characters.
 func shortURLGenerator(n int) string {
 	rand.Seed(time.Now().UnixNano())
 	var letterRunes = []rune("0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
@@ -56,7 +56,7 @@ type Storage interface {
 	Close() error
 }
 
-// implements the choice of storage depending on the configuration, returns the storage interface.
+// func InitializeStorage implements the choice of storage depending on the configuration, returns the storage interface.
 func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
 		return NewDictionary(cfg)
@@ -64,16 +64,15 @@ func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *Del
 	return NewPostgresStorage(cfg, wg, dChannel)
 }
 
-// postgres storage implenetation.
+// type PostgresStorage - postgres storage implenetation.
 type PostgresStorage struct {
 	db            *pgx.Conn
 	WaitGroup     *sync.WaitGroup
 	DeleteChannel chan *DeletedShortURLValues
 }
 
-// creates a new postgres storage object.
+// func NewPostgresStorage creates a new postgres storage object.
 func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
-	//ps, err := sql.Open("pgx", cfg.DBConnectionString)
 	ps, err := pgx.Connect(context.Background(), cfg.DBConnectionString)
 	if err != nil {
 		return NewDictionary(cfg)
@@ -108,7 +107,7 @@ func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *De
 	return pstorage, nil
 }
 
-// adds original URL value to DB postgres, the function returns a short URL value.
+// func AddURL adds original URL value to DB postgres, the function returns a short URL value.
 func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
@@ -144,7 +143,7 @@ func (ps *PostgresStorage) AddURL(ctx context.Context, longURLValue string, user
 	return shortURLvalue, nil
 }
 
-// get original URL value by a short value from the postgres DB.
+// func GetURL get original URL value by a short value from the postgres DB.
 func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	var longURL string
 	var deletedAt *time.Time
@@ -165,7 +164,7 @@ func (ps *PostgresStorage) GetURL(ctx context.Context, shortURLValue string) (st
 	}
 }
 
-// get short URL value and original URL value pairs array created by user (userID)
+// func GetUserURL get short URL value and original URL value pairs array created by user (userID)
 func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
 	rows, err := ps.db.Query(ctx,
@@ -196,7 +195,7 @@ func (ps *PostgresStorage) GetUserURL(ctx context.Context, prefix string, userID
 	return result, nil
 }
 
-// group addition of short URL values to the database postgres via api.
+// func PostAPIBatch group addition of short URL values to the database postgres via api.
 //
 // items - array of BatchRequest
 // prefix - shortener service name
@@ -245,7 +244,7 @@ func (ps *PostgresStorage) PostAPIBatch(
 	return result, nil
 }
 
-// simple test database postgres connection.
+// func Ping simple test database postgres connection.
 func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	err := ps.db.Ping(ctx)
 	if err != nil {
@@ -254,7 +253,7 @@ func (ps *PostgresStorage) Ping(ctx context.Context) error {
 	return err
 }
 
-// the function launches three delete workers.
+// func StartDeleteWorker launches three delete workers.
 func (ps *PostgresStorage) StartDeleteWorker() {
 	workerCount := 3
 
@@ -264,7 +263,7 @@ func (ps *PostgresStorage) StartDeleteWorker() {
 	}
 }
 
-// worker is listening to the DeleteChannel.
+// func DeleteWorker is a listened the DeleteChannel worker.
 // when a value is received through the channel, worker starts DeleteUserURL func.
 func (ps *PostgresStorage) DeleteWorker() {
 	defer ps.WaitGroup.Done()
@@ -274,7 +273,7 @@ func (ps *PostgresStorage) DeleteWorker() {
 	}
 }
 
-// sends an sql query to the postgres repository.
+// func DeleteUserURL sends an sql query to the postgres repository.
 // for entries corresponding to deleted URLs in the
 // postgres database, the deleted_at value is set to the current time.
 func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
@@ -289,19 +288,19 @@ func (ps *PostgresStorage) DeleteUserURL(ctx context.Context, deletedURLs *Delet
 	return err
 }
 
-// close postgres connection.
+// func Close close postgres connection.
 func (ps *PostgresStorage) Close() error {
 	return ps.db.Close(context.Background())
 }
 
-// memory storage implementation.
+// type Dictionary - memory storage implementation.
 type Dictionary struct {
 	Items           map[string]string
 	UserItems       map[int32][]string
 	fileStoragePath string
 }
 
-// create a new memory storage object.
+// func NewDictionary create a new memory storage object.
 func NewDictionary(cfg config.Config) (Storage, error) {
 	items := make(map[string]string)
 	userItems := make(map[int32][]string)
@@ -332,7 +331,7 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 	}, nil
 }
 
-// add original URL value to memory storage.
+// func AddURL add original URL value to memory storage.
 func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
@@ -352,7 +351,7 @@ func (d *Dictionary) AddURL(ctx context.Context, longURLValue string, userID int
 	return shortURLvalue, nil
 }
 
-// get original URL value by a short value from memory storage.
+// func GetURL get original URL value by a short value from memory storage.
 func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	if strings.TrimSpace(shortURLValue) == "" {
 		return "", errors.New("empty short URL value")
@@ -360,7 +359,7 @@ func (d *Dictionary) GetURL(ctx context.Context, shortURLValue string) (string, 
 	return d.Items[shortURLValue], nil
 }
 
-// get short URL value and original URL value pairs array created by user.
+// func GetUserURL get short URL value and original URL value pairs array created by user.
 func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	result := []UserExportType{}
 	for _, v := range d.UserItems[userID] {
@@ -384,7 +383,7 @@ func (d *Dictionary) GetUserURL(ctx context.Context, prefix string, userID int32
 	return result, nil
 }
 
-// group addition of short URL values to the memory storage via api.
+// func PostAPIBatch is a group addition of short URL values to the memory storage via api.
 //
 // items - array of BatchRequest
 // prefix - shortener service name
@@ -415,12 +414,12 @@ func (d *Dictionary) PostAPIBatch(ctx context.Context, items *BatchRequestArray,
 	return result, nil
 }
 
-// interface plug
+// func Ping - interface plug.
 func (d *Dictionary) Ping(ctx context.Context) error {
 	return nil
 }
 
-// delete user URLs from memory storage
+// func DeleteUserURL delete user URLs from memory storage
 func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	if deletedURLs == nil {
 		return nil
@@ -451,30 +450,30 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 	return nil
 }
 
-// close connection plug.
+// func Close inteface plug.
 func (d *Dictionary) Close() error {
 	return nil
 }
 
-// linked list storage item.
+// type URLItem is a linked list storage item.
 type URLItem struct {
 	Next             *URLItem
 	ShortURLValue    string
 	OriginalURLValue string
 }
 
-// linked list storage implementation.
+// type LinkedListURLItem is a linked list storage implementation.
 type LinkedListURLItem struct {
 	Head *URLItem
 	Tail *URLItem
 }
 
-// multiuser linked list storage implementation.
+// type UsersLinkedListMemoryStorage is a multiuser linked list storage implementation.
 type UsersLinkedListMemoryStorage struct {
 	LinkedListStorage map[int32]*LinkedListURLItem
 }
 
-// create a new linked list storage implementation.
+// func NewLinkedListStorage create a new linked list storage implementation.
 func NewLinkedListStorage() Storage {
 	lls := make(map[int32]*LinkedListURLItem)
 	return UsersLinkedListMemoryStorage{
@@ -482,7 +481,7 @@ func NewLinkedListStorage() Storage {
 	}
 }
 
-// add original URL value to linked list storage.
+// func AddURL add original URL value to linked list storage.
 func (l UsersLinkedListMemoryStorage) AddURL(ctx context.Context, longURLValue string, userID int32) (string, error) {
 	if strings.TrimSpace(longURLValue) == "" {
 		return "", errors.New("empty long URL value")
@@ -513,7 +512,7 @@ func (l UsersLinkedListMemoryStorage) AddURL(ctx context.Context, longURLValue s
 	return shortURL, nil
 }
 
-// get original URL value by a short value from linked list storage.
+// func GetURL get original URL value by a short value from linked list storage.
 func (l UsersLinkedListMemoryStorage) GetURL(ctx context.Context, shortURLValue string) (string, error) {
 	if strings.TrimSpace(shortURLValue) == "" {
 		return "", errors.New("empty short URL value")
@@ -537,7 +536,7 @@ func (l UsersLinkedListMemoryStorage) GetURL(ctx context.Context, shortURLValue 
 	return "", nil
 }
 
-// get short URL value and original URL value pairs array created by user.
+// func GetUserURL get short URL value and original URL value pairs array created by user.
 func (l UsersLinkedListMemoryStorage) GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error) {
 	items := l.LinkedListStorage[userID]
 
@@ -564,7 +563,7 @@ func (l UsersLinkedListMemoryStorage) GetUserURL(ctx context.Context, prefix str
 	return result, nil
 }
 
-// group addition of short URL values to the linked list storage via api.
+// func PostAPIBatch - group addition of short URL values to the linked list storage via api.
 //
 // items - array of BatchRequest
 // prefix - shortener service name
@@ -606,12 +605,12 @@ func (l UsersLinkedListMemoryStorage) PostAPIBatch(ctx context.Context, items *B
 	return result, nil
 }
 
-// interface plug
+// func Ping interface plug
 func (l UsersLinkedListMemoryStorage) Ping(ctx context.Context) error {
 	return nil
 }
 
-// delete user URLs from linked list storage
+// func DeleteUserURL delete user URLs from linked list storage
 func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	userID := deletedURLs.UserIDValue
 	list := l.LinkedListStorage[userID]
@@ -652,7 +651,7 @@ func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deleted
 	return nil
 }
 
-// close connection plug.
+// func Close interface plug.
 func (l UsersLinkedListMemoryStorage) Close() error {
 	return nil
 }
