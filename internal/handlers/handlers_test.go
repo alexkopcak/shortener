@@ -277,7 +277,7 @@ func TestURLHandler(t *testing.T) {
 
 			if len(tt.repo.Items) > 0 {
 				for _, v := range tt.repo.Items {
-					d.AddURL(request.Context(), v, 0)
+					d.AddURL(request.Context(), v, storage.ShortURLGenerator(), 0)
 				}
 			}
 			dChan := make(chan *storage.DeletedShortURLValues)

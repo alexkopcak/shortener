@@ -323,14 +323,19 @@ func (h *Handler) PostAPIBatchHandler() http.HandlerFunc {
 			return
 		}
 
-		batchRequest := &storage.BatchRequestArray{}
+		batchRequest := storage.BatchRequestArray{}
 
-		if err = json.Unmarshal(bodyRaw, batchRequest); err != nil {
+		if err = json.Unmarshal(bodyRaw, &batchRequest); err != nil {
 			http.Error(w, "Bad request!", http.StatusBadRequest)
 			return
 		}
 
-		responseValue, err := h.Repo.PostAPIBatch(ctx, batchRequest, h.Cfg.BaseURL, userID)
+		for i := range batchRequest {
+			ptr := &batchRequest[i]
+			ptr.ShortURL = storage.ShortURLGenerator()
+		}
+
+		responseValue, err := h.Repo.PostAPIBatch(ctx, &batchRequest, h.Cfg.BaseURL, userID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -378,7 +383,7 @@ func (h *Handler) PostAPIHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, storage.ShortURLGenerator(), userID)
 		if err != nil {
 			if !errors.Is(err, storage.ErrDuplicateRecord) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
@@ -434,7 +439,7 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 			return
 		}
 
-		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, userID)
+		requestValue, err := h.Repo.AddURL(r.Context(), aliasRequest.LongURLValue, storage.ShortURLGenerator(), userID)
 		if err != nil {
 			if !errors.Is(err, storage.ErrDuplicateRecord) {
 				http.Error(w, err.Error(), http.StatusBadRequest)
