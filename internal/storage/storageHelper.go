@@ -20,6 +20,7 @@ type (
 	BatchRequest struct {
 		CorrelationID string `json:"correlation_id"`
 		OriginalURL   string `json:"original_url"`
+		ShortURL      string `json:"-"`
 	}
 
 	// array of BatchResponse

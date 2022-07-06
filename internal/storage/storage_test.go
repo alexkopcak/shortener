@@ -2,19 +2,24 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
+	"log"
 	"math/rand"
 	"os"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestDictionary_AddURL(t *testing.T) {
+func TestDictionaryAddURL(t *testing.T) {
 	tests := []struct {
 		name         string
 		longURLValue string
@@ -41,7 +46,7 @@ func TestDictionary_AddURL(t *testing.T) {
 			d, err := NewDictionary(config.Config{})
 			require.NoError(t, err)
 			ctx := context.Background()
-			got, err := d.AddURL(ctx, tt.longURLValue, 0)
+			got, err := d.AddURL(ctx, tt.longURLValue, ShortURLGenerator(), 0)
 			if tt.err {
 				require.Error(t, err)
 			} else {
@@ -55,7 +60,7 @@ func TestDictionary_AddURL(t *testing.T) {
 	}
 }
 
-func TestDictionary_GetURL(t *testing.T) {
+func TestDictionaryGetURL(t *testing.T) {
 	type fields struct {
 		Items             map[string]string
 		MinShortURLLength int
@@ -87,20 +92,13 @@ func TestDictionary_GetURL(t *testing.T) {
 	}
 }
 
-func Test_shortURLGenerator(t *testing.T) {
-	type args struct {
-		n int
-	}
+func TestShortURLGenerator(t *testing.T) {
 	tests := []struct {
 		name  string
-		args  args
 		count int
 	}{
 		{
-			name: "generated value are not empty and equal",
-			args: args{
-				n: 5,
-			},
+			name:  "generated value are not empty and equal",
 			count: 1000,
 		},
 	}
@@ -108,8 +106,8 @@ func Test_shortURLGenerator(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			val := []string{}
 			for i := 1; i <= tt.count; i++ {
-				got := shortURLGenerator(tt.args.n)
-				assert.Equal(t, tt.args.n, len(got))
+				got := ShortURLGenerator()
+				assert.Equal(t, minShortURLLengthConst, len(got))
 				require.NotContains(t, val, got)
 				val = append(val, got)
 			}
@@ -117,7 +115,7 @@ func Test_shortURLGenerator(t *testing.T) {
 	}
 }
 
-func TestDictionary_GetUserURL(t *testing.T) {
+func TestDictionaryGetUserURL(t *testing.T) {
 	type fields struct {
 		Items             map[string]string
 		UserItems         map[int32][]string
@@ -205,7 +203,7 @@ func TestDictionary_GetUserURL(t *testing.T) {
 	}
 }
 
-func TestDictionary_PostAPIBatch(t *testing.T) {
+func TestDictionaryPostAPIBatch(t *testing.T) {
 	type fields struct {
 		Items           map[string]string
 		UserItems       map[int32][]string
@@ -237,6 +235,7 @@ func TestDictionary_PostAPIBatch(t *testing.T) {
 					BatchRequest{
 						CorrelationID: "correlation ID 1",
 						OriginalURL:   "http://test.tst1",
+						ShortURL:      ShortURLGenerator(),
 					},
 				},
 				prefix: "http://localhost:8080",
@@ -401,7 +400,7 @@ func BenchmarkDictionaryStorage(b *testing.B) {
 	b.Run("addURL", func(b *testing.B) {
 		for ; userID < userCount; userID++ {
 			for i := 0; i < runsCount; i++ {
-				shortURLs[i], err = dic.AddURL(context.Background(), fmt.Sprintf("%s_%v", addedURL, i), userID)
+				shortURLs[i], err = dic.AddURL(context.Background(), fmt.Sprintf("%s_%v", addedURL, i), ShortURLGenerator(), userID)
 			}
 		}
 	})
@@ -447,7 +446,7 @@ func BenchmarkLinkedListStorage(b *testing.B) {
 	b.Run("addURL", func(b *testing.B) {
 		for ; userID < userCount; userID++ {
 			for i := 0; i < runsCount; i++ {
-				shortURLs[i], err = dic.AddURL(context.Background(), fmt.Sprintf("%s_%v", addedURL, i), userID)
+				shortURLs[i], err = dic.AddURL(context.Background(), fmt.Sprintf("%s_%v", addedURL, i), ShortURLGenerator(), userID)
 			}
 		}
 	})
@@ -477,7 +476,7 @@ func BenchmarkLinkedListStorage(b *testing.B) {
 	})
 }
 
-func TestDictionary_DeleteUserURL(t *testing.T) {
+func TestDictionaryDeleteUserURL(t *testing.T) {
 	type fields struct {
 		Items           map[string]string
 		UserItems       map[int32][]string
@@ -537,7 +536,7 @@ func TestDictionary_DeleteUserURL(t *testing.T) {
 				LongURLValue:  "this is long URL value",
 			}
 
-			item.ShortURLValue, err = d.AddURL(tt.args.ctx, item.LongURLValue, tt.args.deletedURLs.UserIDValue)
+			item.ShortURLValue, err = d.AddURL(tt.args.ctx, item.LongURLValue, ShortURLGenerator(), tt.args.deletedURLs.UserIDValue)
 			require.NoError(t, err)
 
 			longURL, err := d.GetURL(tt.args.ctx, item.ShortURLValue)
@@ -561,7 +560,7 @@ func TestDictionary_DeleteUserURL(t *testing.T) {
 	}
 }
 
-func TestDictionary_NewDictionaryWithStorage(t *testing.T) {
+func TestDictionaryNewDictionaryWithStorage(t *testing.T) {
 	tests := []struct {
 		name        string
 		fileStorage string
@@ -596,7 +595,7 @@ func TestDictionary_NewDictionaryWithStorage(t *testing.T) {
 	}
 }
 
-func TestDictionary_DeleteUserURLSecond(t *testing.T) {
+func TestDictionaryDeleteUserURLSecond(t *testing.T) {
 	type fields struct {
 		Items           map[string]string
 		UserItems       map[int32][]string
@@ -641,7 +640,7 @@ func TestDictionary_DeleteUserURLSecond(t *testing.T) {
 	}
 }
 
-func TestDictionary_Ping(t *testing.T) {
+func TestDictionaryPing(t *testing.T) {
 	type fields struct {
 		Items           map[string]string
 		UserItems       map[int32][]string
@@ -675,7 +674,7 @@ func TestDictionary_Ping(t *testing.T) {
 	}
 }
 
-func TestLinkedList_AddURL(t *testing.T) {
+func TestLinkedListAddURL(t *testing.T) {
 	tests := []struct {
 		name         string
 		longURLValue string
@@ -701,7 +700,7 @@ func TestLinkedList_AddURL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			d := NewLinkedListStorage()
 			ctx := context.Background()
-			got, err := d.AddURL(ctx, tt.longURLValue, 0)
+			got, err := d.AddURL(ctx, tt.longURLValue, ShortURLGenerator(), 0)
 			if tt.err {
 				require.Error(t, err)
 			} else {
@@ -715,7 +714,7 @@ func TestLinkedList_AddURL(t *testing.T) {
 	}
 }
 
-func TestLinkedList_GetURL(t *testing.T) {
+func TestLinkedListGetURL(t *testing.T) {
 	type importItemType struct {
 		OriginalURLValue string
 		RemoveAfter      bool
@@ -786,7 +785,7 @@ func TestLinkedList_GetURL(t *testing.T) {
 			d := NewLinkedListStorage()
 
 			for _, v := range tt.args.importedItem {
-				val, err := d.AddURL(context.Background(), v.OriginalURLValue, v.UserID)
+				val, err := d.AddURL(context.Background(), v.OriginalURLValue, ShortURLGenerator(), v.UserID)
 				assert.NoError(t, err)
 				d.DeleteUserURL(context.Background(), &DeletedShortURLValues{
 					ShortURLValues: []string{val},
@@ -801,7 +800,7 @@ func TestLinkedList_GetURL(t *testing.T) {
 	}
 }
 
-func TestLinkedList_GetUserURL(t *testing.T) {
+func TestLinkedListGetUserURL(t *testing.T) {
 	type args struct {
 		prefix       string
 		originalURL  string
@@ -840,7 +839,7 @@ func TestLinkedList_GetUserURL(t *testing.T) {
 			val1 := ""
 			var err error
 			if !tt.args.emptyStorage {
-				val1, err = d.AddURL(ctx, tt.args.originalURL, tt.args.userID)
+				val1, err = d.AddURL(ctx, tt.args.originalURL, ShortURLGenerator(), tt.args.userID)
 				require.NoError(t, err)
 			}
 
@@ -861,7 +860,7 @@ func TestLinkedList_GetUserURL(t *testing.T) {
 	}
 }
 
-func TestLinedList_PostAPIBatch(t *testing.T) {
+func TestLinedListPostAPIBatch(t *testing.T) {
 	type args struct {
 		ctx    context.Context
 		items  *BatchRequestArray
@@ -882,6 +881,7 @@ func TestLinedList_PostAPIBatch(t *testing.T) {
 					BatchRequest{
 						CorrelationID: "correlation ID 1",
 						OriginalURL:   "http://test.tst1",
+						ShortURL:      ShortURLGenerator(),
 					},
 				},
 				prefix: "http://localhost:8080",
@@ -915,7 +915,7 @@ func TestLinedList_PostAPIBatch(t *testing.T) {
 	}
 }
 
-func TestUsersLinkedListMemoryStorage_DeleteUserURL(t *testing.T) {
+func TestUsersLinkedListMemoryStorageDeleteUserURL(t *testing.T) {
 	type importURLvalue struct {
 		OriginalURLValue string
 		DeleteAfter      bool
@@ -1038,7 +1038,7 @@ func TestUsersLinkedListMemoryStorage_DeleteUserURL(t *testing.T) {
 				LinkedListStorage: tt.fields.LinkedListStorage,
 			}
 			for _, v := range tt.args.importedURLValues {
-				val, err := l.AddURL(context.Background(), v.OriginalURLValue, v.UserID)
+				val, err := l.AddURL(context.Background(), v.OriginalURLValue, ShortURLGenerator(), v.UserID)
 				require.NoError(t, err)
 				if v.DeleteAfter {
 					tt.args.deletedURLs.ShortURLValues = append(tt.args.deletedURLs.ShortURLValues, val)
@@ -1051,4 +1051,224 @@ func TestUsersLinkedListMemoryStorage_DeleteUserURL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func NewMock() (*sql.DB, sqlmock.Sqlmock) {
+	db, mock, err := sqlmock.New()
+	if err != nil {
+		log.Fatalf("an error '%s' was not expected when opening a stub database connection", err)
+	}
+	return db, mock
+}
+
+type tableModel struct {
+	Stamp       *time.Time
+	ShortURL    string
+	OriginalURL string
+	ID          int32
+}
+
+func TestPostgresGetURL(t *testing.T) {
+
+	var i = &tableModel{
+		ShortURL:    "shortURL",
+		OriginalURL: "http://test.tst",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
+
+	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
+
+	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
+
+	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
+	assert.NotNil(t, originalURL)
+	require.NoError(t, err)
+}
+
+func TestPostgresGetURLDeletedRecord(t *testing.T) {
+	var i = &tableModel{
+		ShortURL:    "shortURL",
+		OriginalURL: "http://test.tst",
+	}
+
+	stamp := time.Now()
+	i.Stamp = &stamp
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "SELECT original_url, deleted_at FROM shortener WHERE short_url \\= \\$1 ;"
+
+	rows := sqlmock.NewRows([]string{"original_url", "deleted_at"}).AddRow(i.OriginalURL, i.Stamp)
+
+	mock.ExpectQuery(query).WithArgs(i.ShortURL).WillReturnRows(rows)
+
+	originalURL, err := repo.GetURL(context.Background(), i.ShortURL)
+	assert.NotNil(t, originalURL)
+	require.Error(t, err)
+}
+
+func TestPostgresGetUserURL(t *testing.T) {
+	var i = &tableModel{
+		ID:          1,
+		ShortURL:    "shortURL",
+		OriginalURL: "http://test.tst",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "SELECT short_url, original_url " +
+		"FROM shortener " +
+		"WHERE user_id \\= \\$1 ;"
+
+	rows := sqlmock.NewRows([]string{"short_url", "original_url"}).AddRow(i.ShortURL, i.OriginalURL)
+
+	mock.ExpectQuery(query).WithArgs(i.ID).WillReturnRows(rows)
+
+	result, err := repo.GetUserURL(context.Background(), "prefix", i.ID)
+	assert.NotNil(t, result)
+	require.NoError(t, err)
+}
+
+func TestPostgresAddURL(t *testing.T) {
+	var i = &tableModel{
+		ID:          1,
+		ShortURL:    "shortURL",
+		OriginalURL: "http://original.url",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "INSERT INTO shortener \\(user_id, short_url, original_url\\) VALUES \\(\\$1, \\$2, \\$3\\)" +
+		" ON CONFLICT \\(user_id, original_url\\) DO NOTHING; "
+
+	mock.ExpectExec(query).WithArgs(i.ID, i.ShortURL, i.OriginalURL).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	query2 := "SELECT short_url " +
+		"FROM shortener " +
+		"WHERE user_id \\= \\$1 AND original_url \\= \\$2 ;"
+
+	rows := sqlmock.NewRows([]string{"short_url"}).AddRow(i.ShortURL)
+	mock.ExpectQuery(query2).WithArgs(i.ID, i.OriginalURL).WillReturnRows(rows)
+
+	val, err := repo.AddURL(context.Background(), i.OriginalURL, i.ShortURL, i.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, val)
+}
+
+func TestPostgresAddURLError(t *testing.T) {
+	var i = &tableModel{
+		ID:          1,
+		ShortURL:    "shortURL",
+		OriginalURL: "http://original.url",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "INSERT INTO shortener \\(user_id, short_url, original_url\\) VALUES \\(\\$1, \\$2, \\$3\\)" +
+		" ON CONFLICT \\(user_id, original_url\\) DO NOTHING; "
+
+	mock.ExpectExec(query).WithArgs(i.ID, i.ShortURL, i.OriginalURL).WillReturnResult(sqlmock.NewResult(0, 0))
+
+	query2 := "SELECT short_url " +
+		"FROM shortener " +
+		"WHERE user_id \\= \\$1 AND original_url \\= \\$2 ;"
+
+	rows := sqlmock.NewRows([]string{"short_url"}).AddRow(i.ShortURL)
+	mock.ExpectQuery(query2).WithArgs(i.ID, i.OriginalURL).WillReturnRows(rows)
+
+	val, err := repo.AddURL(context.Background(), i.OriginalURL, i.ShortURL, i.ID)
+	require.ErrorIs(t, err, ErrDuplicateRecord)
+	require.NotEmpty(t, val)
+}
+
+func TestPostgresAddURLErrorEmptyOriginalURL(t *testing.T) {
+	var i = &tableModel{
+		ID:          1,
+		ShortURL:    "shortURL",
+		OriginalURL: "",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "INSERT INTO shortener \\(user_id, short_url, original_url\\) VALUES \\(\\$1, \\$2, \\$3\\)" +
+		" ON CONFLICT \\(user_id, original_url\\) DO NOTHING; "
+
+	mock.ExpectExec(query).WithArgs(i.ID, i.ShortURL, i.OriginalURL).WillReturnResult(sqlmock.NewResult(0, 0))
+
+	query2 := "SELECT short_url " +
+		"FROM shortener " +
+		"WHERE user_id \\= \\$1 AND original_url \\= \\$2 ;"
+
+	rows := sqlmock.NewRows([]string{"short_url"}).AddRow(i.ShortURL)
+	mock.ExpectQuery(query2).WithArgs(i.ID, i.OriginalURL).WillReturnRows(rows)
+
+	val, err := repo.AddURL(context.Background(), i.OriginalURL, i.ShortURL, i.ID)
+	require.Error(t, err)
+	require.Empty(t, val)
+}
+
+func TestPostgresPostAPIBatch(t *testing.T) {
+	var i = &tableModel{
+		ID:          1,
+		ShortURL:    "shortURL",
+		OriginalURL: "http://original.url",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "INSERT INTO shortener \\(user_id, short_url, original_url\\) VALUES \\(\\$1, \\$2, \\$3\\);"
+
+	mock.ExpectBegin()
+	mock.ExpectExec(query).WithArgs(i.ID, i.ShortURL, i.OriginalURL).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+
+	batch := BatchRequest{
+		CorrelationID: "correlation ID",
+		OriginalURL:   i.OriginalURL,
+		ShortURL:      i.ShortURL,
+	}
+
+	batchArray := &BatchRequestArray{batch}
+
+	val, err := repo.PostAPIBatch(context.Background(), batchArray, "", i.ID)
+	require.NoError(t, err)
+	require.NotEmpty(t, val)
 }

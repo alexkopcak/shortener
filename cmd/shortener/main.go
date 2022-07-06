@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/alexkopcak/shortener/internal/app"
+	"github.com/alexkopcak/shortener/internal/config"
 )
 
 // link flags
@@ -15,8 +16,18 @@ var (
 )
 
 func main() {
+	// new configuration
+	cfg, err := config.NewConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// link flags
 	fmt.Println("Build version:", buildVersion)
 	fmt.Println("Build date:", buildDate)
 	fmt.Println("Build commit:", buildCommit)
-	log.Fatal(app.Run())
+
+	if err = app.Run(cfg); err != nil {
+		log.Fatal(err)
+	}
 }

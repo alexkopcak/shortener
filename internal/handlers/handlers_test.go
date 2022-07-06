@@ -277,7 +277,7 @@ func TestURLHandler(t *testing.T) {
 
 			if len(tt.repo.Items) > 0 {
 				for _, v := range tt.repo.Items {
-					d.AddURL(request.Context(), v, 0)
+					d.AddURL(request.Context(), v, storage.ShortURLGenerator(), 0)
 				}
 			}
 			dChan := make(chan *storage.DeletedShortURLValues)
@@ -464,6 +464,193 @@ func TestHandler_DeleteUserURLHandler(t *testing.T) {
 			assert.Equal(t, tt.want.body, string(requestResult))
 			err = result.Body.Close()
 			require.NoError(t, err)
+		})
+	}
+}
+
+func TestHandler_Ping(t *testing.T) {
+	type want struct {
+		statusCode int
+	}
+
+	tests := []struct {
+		name     string
+		target   string
+		template string
+		method   string
+		repo     storage.Dictionary
+		want     want
+	}{
+		{
+			name:     "ping test",
+			target:   baseURL + "/ping",
+			template: "/",
+			method:   http.MethodGet,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				statusCode: http.StatusOK,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.template)))
+			w := httptest.NewRecorder()
+			d, err := storage.NewDictionary(config.Config{})
+			require.NoError(t, err)
+
+			dChan := make(chan *storage.DeletedShortURLValues, 1)
+
+			h := http.Server{
+				Handler: URLHandler(d, config.Config{
+					BaseURL:        baseURL,
+					SecretKey:      secretKey,
+					CookieAuthName: cookieAuthName,
+				}, dChan),
+			}
+
+			h.Handler.ServeHTTP(w, request)
+
+			close(dChan)
+
+			result := w.Result()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			err = result.Body.Close()
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestHandler_GetAPIAllURLHandler(t *testing.T) {
+	type want struct {
+		contentType string
+		body        string
+		statusCode  int
+	}
+
+	tests := []struct {
+		name   string
+		target string
+		body   string
+		method string
+		repo   storage.Dictionary
+		want   want
+	}{
+		{
+			name:   "get values from empty storage",
+			target: baseURL + "/api/user/urls",
+			body:   "",
+			method: http.MethodGet,
+			repo: storage.Dictionary{
+				Items: map[string]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusNoContent,
+				body:        "[]",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.body)))
+			w := httptest.NewRecorder()
+
+			dChan := make(chan *storage.DeletedShortURLValues)
+			h := http.Server{
+				Handler: URLHandler(&tt.repo, config.Config{
+					BaseURL:        baseURL,
+					SecretKey:      secretKey,
+					CookieAuthName: cookieAuthName,
+				}, dChan),
+			}
+			h.Handler.ServeHTTP(w, request)
+
+			result := w.Result()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			requestResult, err := ioutil.ReadAll(result.Body)
+			require.NoError(t, err)
+
+			assert.Equal(t, tt.want.body, string(requestResult))
+			err = result.Body.Close()
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestHandler_PostAPIBatchHandler(t *testing.T) {
+	type want struct {
+		contentType string
+		body        string
+		statusCode  int
+	}
+
+	tests := []struct {
+		name          string
+		target        string
+		correlationID string
+		originalURL   string
+		method        string
+		repo          storage.Dictionary
+		want          want
+	}{
+		{
+			name:          "set batch values with api",
+			target:        baseURL + "/api/shorten/batch",
+			correlationID: "1",
+			originalURL:   "http:\\test.tst",
+			method:        http.MethodPost,
+			repo:          storage.Dictionary{},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusCreated,
+				body:        "[]",
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			item := storage.BatchRequestArray{
+				storage.BatchRequest{
+					CorrelationID: tt.correlationID,
+					OriginalURL:   tt.originalURL,
+				},
+			}
+			body, err := json.Marshal(item)
+			require.NoError(t, err)
+
+			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer(body))
+			w := httptest.NewRecorder()
+
+			dChan := make(chan *storage.DeletedShortURLValues)
+
+			cfg := config.Config{
+				BaseURL:        baseURL,
+				SecretKey:      secretKey,
+				CookieAuthName: cookieAuthName,
+			}
+
+			d, err := storage.NewDictionary(cfg)
+			require.NoError(t, err)
+
+			h := http.Server{
+				Handler: URLHandler(d, cfg, dChan),
+			}
+
+			h.Handler.ServeHTTP(w, request)
+
+			result := w.Result()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			require.NoError(t, err)
+
+			err = result.Body.Close()
+			require.NoError(t, err)
+
 		})
 	}
 }
