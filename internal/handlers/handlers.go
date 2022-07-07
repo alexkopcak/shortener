@@ -13,6 +13,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"strings"
 
@@ -27,6 +29,7 @@ import (
 // type Handler - handler class.
 type (
 	Handler struct {
+		trustedNet *net.IPNet
 		*chi.Mux
 		dChannel chan *storage.DeletedShortURLValues
 		Repo     storage.Storage
@@ -58,6 +61,8 @@ func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.
 		dChannel: dChan,
 	}
 
+	h.setTrustedSubnet(cfg.TrustedSubnet)
+
 	h.Mux.Use(h.authMiddlewareHandler)
 	h.Mux.Use(gzipMiddlewareHandle)
 
@@ -81,6 +86,16 @@ func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.
 	h.Mux.NotFound(h.NotFound())
 
 	return h
+}
+
+func (h *Handler) setTrustedSubnet(subnet string) {
+	_, trustedNet, err := net.ParseCIDR(subnet)
+	if err != nil {
+		trustedNet = nil
+		log.Printf("%s\n", err)
+		log.Printf("bad trusted subnet value \"%s\" ; trusted subnet is empty value\n", subnet)
+	}
+	h.trustedNet = trustedNet
 }
 
 // DeleteUserURLHandler godoc
@@ -466,12 +481,26 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 // @Summary get short URL value
 // @Tags Storage
 // @Success 200 {string} string
-// @Failure 403 {string} string
+// @Failure 403, 400 {string} string
 // @Router /api/internal/stats [get]
 func (h *Handler) GetInternalStats() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if xRealIP := r.Header.Get("X-Real-IP"); xRealIP == "" {
+		if !h.trustedNet.Contains(net.ParseIP(r.Header.Get("X-Real-IP"))) {
 			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		stats, err := h.Repo.GetInternalStats(r.Context())
+		if err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		if err = json.NewEncoder(w).Encode(&stats); err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}
 	}

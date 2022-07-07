@@ -52,6 +52,7 @@ type Storage interface {
 	AddURL(ctx context.Context, longURLValue string, shortURLValue string, userID int32) (string, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
+	GetInternalStats(ctx context.Context) (InternalStats, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
 	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
@@ -296,6 +297,19 @@ func (ps *PostgresStorage) Close() error {
 	return ps.db.Close()
 }
 
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (ps *PostgresStorage) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	internalStats := InternalStats{}
+	err := ps.db.QueryRowContext(ctx,
+		"SELECT user_nested.user_cnt, url_nested.url_cnt "+
+			"FROM "+
+			"(SELECT COUNT(DISTINCT user_id) AS user_cnt FROM shortener WHERE deleted_at IS NULL) AS user_nested, "+
+			"(SELECT COUNT(*) AS url_cnt FROM shortener WHERE deleted_at IS NULL) AS url_nested;").
+		Scan(&internalStats.Users, &internalStats.URLs)
+
+	return internalStats, err
+}
+
 // type Dictionary - memory storage implementation.
 type Dictionary struct {
 	Items           map[string]string
@@ -454,6 +468,14 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 // func Close inteface plug.
 func (d *Dictionary) Close() error {
 	return nil
+}
+
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (d *Dictionary) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	return InternalStats{
+		URLs:  len(d.Items),
+		Users: len(d.UserItems),
+	}, nil
 }
 
 // type URLItem is a linked list storage item.
@@ -653,4 +675,23 @@ func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deleted
 // func Close interface plug.
 func (l UsersLinkedListMemoryStorage) Close() error {
 	return nil
+}
+
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (l UsersLinkedListMemoryStorage) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	counter := 0
+	for _, v := range l.LinkedListStorage {
+		currentItem := v.Head
+		for currentItem != nil {
+			counter++
+			currentItem = currentItem.Next
+		}
+	}
+
+	internalStats := InternalStats{
+		URLs:  counter,
+		Users: len(l.LinkedListStorage),
+	}
+
+	return internalStats, nil
 }
