@@ -1317,22 +1317,22 @@ func TestPostgresGetInternalStats(t *testing.T) {
 		repo.Close()
 	}()
 
-	user_cnt := 2
-	url_cnt := 3
+	userCnt := 2
+	urlCnt := 3
 
 	query := "SELECT user_nested.user_cnt, url_nested.url_cnt " +
 		"FROM " +
 		"\\(SELECT COUNT\\(DISTINCT user_id\\) AS user_cnt FROM shortener WHERE deleted_at IS NULL\\) AS user_nested, " +
 		"\\(SELECT COUNT\\(\\*\\) AS url_cnt FROM shortener WHERE deleted_at IS NULL\\) AS url_nested;"
 
-	rows := sqlmock.NewRows([]string{"user_nested.user_cnt", "url_nested.url_cnt"}).AddRow(user_cnt, url_cnt)
+	rows := sqlmock.NewRows([]string{"user_nested.user_cnt", "url_nested.url_cnt"}).AddRow(userCnt, urlCnt)
 	mock.ExpectQuery(query).WithArgs().WillReturnRows(rows)
 
 	val, err := repo.GetInternalStats(context.Background())
 
 	require.NoError(t, err)
-	require.Equal(t, user_cnt, val.Users)
-	require.Equal(t, url_cnt, val.URLs)
+	require.Equal(t, userCnt, val.Users)
+	require.Equal(t, urlCnt, val.URLs)
 
 }
 

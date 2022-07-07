@@ -628,11 +628,11 @@ func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 
 			if tt.originalURL != "" {
 				h.Handler.ServeHTTP(addw, addreq)
-				cooks := addw.Result().Cookies()
-				for _, v := range cooks {
+				cooks := addw.Result()
+				for _, v := range cooks.Cookies() {
 					request.AddCookie(v)
 				}
-				addw.Result().Body.Close()
+				cooks.Body.Close()
 			}
 
 			h.Handler.ServeHTTP(w, request)
@@ -812,7 +812,7 @@ func TestHandler_GetInternalStats(t *testing.T) {
 			h.Handler.ServeHTTP(w, request)
 
 			result := w.Result()
-			defer w.Result().Body.Close()
+			result.Body.Close()
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
@@ -876,7 +876,7 @@ func TestMiddleware_gzip(t *testing.T) {
 			h.Handler.ServeHTTP(w, request)
 
 			result := w.Result()
-			defer w.Result().Body.Close()
+			result.Body.Close()
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
