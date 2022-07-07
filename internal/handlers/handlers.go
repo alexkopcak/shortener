@@ -49,8 +49,8 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// URLHandler create handler object and set handlers endpoints.
-func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
+// NewURLHandler create handler object and set handlers endpoints.
+func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
 		Mux:      chi.NewMux(),
 		Repo:     repo,
@@ -68,6 +68,7 @@ func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.Del
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
 	h.Mux.Delete("/api/user/urls", h.DeleteUserURLHandler())
+	h.Mux.Get("/api/internal/stats", h.GetInternalStats())
 
 	h.Mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
 	h.Mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
@@ -456,6 +457,21 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+// GetInternalStats godoc
+// @Summary get short URL value
+// @Tags Storage
+// @Success 200 {string} string
+// @Failure 403 {string} string
+// @Router /api/internal/stats [get]
+func (h *Handler) GetInternalStats() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if xRealIP := r.Header.Get("X-Real-IP"); xRealIP == "" {
+			w.WriteHeader(http.StatusForbidden)
 			return
 		}
 	}

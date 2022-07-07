@@ -43,7 +43,7 @@ func Run(cfg config.Config) error {
 	//HTTP Server
 	server := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(repository, cfg, dChannel),
+		Handler: handlers.NewURLHandler(repository, cfg, dChannel),
 	}
 
 	// the channel notifying about the closure of connections

@@ -283,7 +283,7 @@ func TestURLHandler(t *testing.T) {
 			dChan := make(chan *storage.DeletedShortURLValues)
 
 			h := http.Server{
-				Handler: URLHandler(d, config.Config{
+				Handler: NewURLHandler(d, config.Config{
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
@@ -320,7 +320,7 @@ func TestURLHandler(t *testing.T) {
 				dChan := make(chan *storage.DeletedShortURLValues)
 
 				h2 := http.Server{
-					Handler: URLHandler(d, config.Config{
+					Handler: NewURLHandler(d, config.Config{
 						BaseURL:        baseURL,
 						SecretKey:      secretKey,
 						CookieAuthName: cookieAuthName,
@@ -363,7 +363,7 @@ func TestCookie(t *testing.T) {
 			dChan := make(chan *storage.DeletedShortURLValues)
 			require.NoError(t, err)
 			h := http.Server{
-				Handler: URLHandler(d, config.Config{
+				Handler: NewURLHandler(d, config.Config{
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
@@ -444,7 +444,7 @@ func TestHandler_DeleteUserURLHandler(t *testing.T) {
 			dChan := make(chan *storage.DeletedShortURLValues, 1)
 
 			h := http.Server{
-				Handler: URLHandler(d, config.Config{
+				Handler: NewURLHandler(d, config.Config{
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
@@ -504,7 +504,7 @@ func TestHandler_Ping(t *testing.T) {
 			dChan := make(chan *storage.DeletedShortURLValues, 1)
 
 			h := http.Server{
-				Handler: URLHandler(d, config.Config{
+				Handler: NewURLHandler(d, config.Config{
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
@@ -561,7 +561,7 @@ func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 
 			dChan := make(chan *storage.DeletedShortURLValues)
 			h := http.Server{
-				Handler: URLHandler(&tt.repo, config.Config{
+				Handler: NewURLHandler(&tt.repo, config.Config{
 					BaseURL:        baseURL,
 					SecretKey:      secretKey,
 					CookieAuthName: cookieAuthName,
@@ -638,7 +638,7 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 			require.NoError(t, err)
 
 			h := http.Server{
-				Handler: URLHandler(d, cfg, dChan),
+				Handler: NewURLHandler(d, cfg, dChan),
 			}
 
 			h.Handler.ServeHTTP(w, request)
