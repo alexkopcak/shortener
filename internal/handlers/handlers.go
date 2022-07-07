@@ -89,6 +89,10 @@ func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.
 }
 
 func (h *Handler) setTrustedSubnet(subnet string) {
+	if strings.TrimSpace(subnet) == "" {
+		h.trustedNet = nil
+		return
+	}
 	_, trustedNet, err := net.ParseCIDR(subnet)
 	if err != nil {
 		trustedNet = nil
