@@ -266,11 +266,50 @@ func TestURLHandler(t *testing.T) {
 				location:    "",
 			},
 		},
+		{
+			name:     "api post value and empty body",
+			target:   baseURL + "/api/shorten",
+			template: "{\"url\": \"%s\"}",
+			body:     "",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items:     map[string]string{},
+				UserItems: map[int32][]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Body are not contain URL!",
+				location:    "",
+			},
+		},
+		{
+			name:     "api post value and empty body and template",
+			target:   baseURL + "/api/shorten",
+			template: "",
+			body:     "",
+			method:   http.MethodPost,
+			repo: storage.Dictionary{
+				Items:     map[string]string{},
+				UserItems: map[int32][]string{},
+			},
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "Body are not contain URL!",
+				location:    "",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
+			var request *http.Request
+			if tt.template == "" {
+				request = httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte("")))
+			} else {
+				request = httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
+			}
 			w := httptest.NewRecorder()
 			d, err := storage.NewDictionary(config.Config{})
 			require.NoError(t, err)
@@ -527,36 +566,55 @@ func TestHandler_Ping(t *testing.T) {
 func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 	type want struct {
 		contentType string
-		body        string
 		statusCode  int
 	}
 
 	tests := []struct {
-		name   string
-		target string
-		body   string
-		method string
-		repo   storage.Dictionary
-		want   want
+		name        string
+		target      string
+		method      string
+		originalURL string
+		repo        storage.Dictionary
+		want        want
 	}{
 		{
-			name:   "get values from empty storage",
-			target: baseURL + "/api/user/urls",
-			body:   "",
-			method: http.MethodGet,
+			name:        "get values from empty storage",
+			target:      baseURL + "/api/user/urls",
+			method:      http.MethodGet,
+			originalURL: "",
 			repo: storage.Dictionary{
 				Items: map[string]string{},
 			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusNoContent,
-				body:        "[]",
+			},
+		},
+		{
+			name:        "get values from storage",
+			target:      baseURL + "/api/user/urls",
+			method:      http.MethodGet,
+			originalURL: "http://original.url",
+			repo: storage.Dictionary{
+				Items:     map[string]string{},
+				UserItems: map[int32][]string{},
+			},
+			want: want{
+				contentType: "application/json",
+				statusCode:  http.StatusOK,
 			},
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.body)))
+			var addreq *http.Request
+			var addw *httptest.ResponseRecorder
+			if tt.originalURL != "" {
+				addreq = httptest.NewRequest(http.MethodPost, baseURL, bytes.NewBuffer([]byte(tt.originalURL)))
+				addw = httptest.NewRecorder()
+			}
+
+			request := httptest.NewRequest(tt.method, tt.target, nil)
 			w := httptest.NewRecorder()
 
 			dChan := make(chan *storage.DeletedShortURLValues)
@@ -567,17 +625,24 @@ func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 					CookieAuthName: cookieAuthName,
 				}, dChan),
 			}
+
+			if tt.originalURL != "" {
+				h.Handler.ServeHTTP(addw, addreq)
+				cooks := addw.Result().Cookies()
+				for _, v := range cooks {
+					request.AddCookie(v)
+				}
+				addw.Result().Body.Close()
+			}
+
 			h.Handler.ServeHTTP(w, request)
+
+			close(dChan)
 
 			result := w.Result()
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
-			requestResult, err := ioutil.ReadAll(result.Body)
-			require.NoError(t, err)
-
-			assert.Equal(t, tt.want.body, string(requestResult))
-			err = result.Body.Close()
-			require.NoError(t, err)
+			result.Body.Close()
 		})
 	}
 }
@@ -590,38 +655,53 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name          string
-		target        string
-		correlationID string
-		originalURL   string
-		method        string
-		repo          storage.Dictionary
-		want          want
+		name   string
+		target string
+		method string
+		repo   storage.Dictionary
+		item   *storage.BatchRequestArray
+		want   want
 	}{
 		{
-			name:          "set batch values with api",
-			target:        baseURL + "/api/shorten/batch",
-			correlationID: "1",
-			originalURL:   "http:\\test.tst",
-			method:        http.MethodPost,
-			repo:          storage.Dictionary{},
+			name:   "set batch values with api",
+			target: baseURL + "/api/shorten/batch",
+			method: http.MethodPost,
+			repo:   storage.Dictionary{},
+			item: &storage.BatchRequestArray{
+				storage.BatchRequest{
+					CorrelationID: "1",
+					OriginalURL:   "http:\\test.tst",
+				},
+			},
 			want: want{
 				contentType: "text/plain; charset=utf-8",
 				statusCode:  http.StatusCreated,
 				body:        "[]",
 			},
 		},
+		{
+			name:   "set batch values with api empty body",
+			target: baseURL + "/api/shorten/batch",
+			method: http.MethodPost,
+			repo:   storage.Dictionary{},
+			item:   nil,
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  http.StatusBadRequest,
+				body:        "[]",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			item := storage.BatchRequestArray{
-				storage.BatchRequest{
-					CorrelationID: tt.correlationID,
-					OriginalURL:   tt.originalURL,
-				},
+			var body []byte
+			if tt.item != nil {
+				var err error
+				body, err = json.Marshal(tt.item)
+				require.NoError(t, err)
+			} else {
+				body = nil
 			}
-			body, err := json.Marshal(item)
-			require.NoError(t, err)
 
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer(body))
 			w := httptest.NewRecorder()
@@ -645,6 +725,8 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 
 			result := w.Result()
 
+			close(dChan)
+
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			require.NoError(t, err)
 
@@ -653,4 +735,152 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 
 		})
 	}
+}
+
+func TestHandler_GetInternalStats(t *testing.T) {
+	type want struct {
+		contentType string
+		statusCode  int
+	}
+
+	tests := []struct {
+		name          string
+		realipRequest string
+		trustedNet    string
+		want          want
+	}{
+		{
+			name:          "no x-real-ip",
+			realipRequest: "",
+			trustedNet:    "10.0.0.1/24",
+			want: want{
+				contentType: "",
+				statusCode:  403,
+			},
+		},
+		{
+			name:          "no trusted network",
+			realipRequest: "10.0.0.1",
+			trustedNet:    "",
+			want: want{
+				contentType: "",
+				statusCode:  403,
+			},
+		},
+		{
+			name:          "trusted network with ip",
+			realipRequest: "10.0.0.1",
+			trustedNet:    "10.0.0.0/8",
+			want: want{
+				contentType: "application/json",
+				statusCode:  200,
+			},
+		},
+		{
+			name:          "bad trusted network with ip",
+			realipRequest: "10.0.0.1",
+			trustedNet:    "10.0.0.0",
+			want: want{
+				contentType: "",
+				statusCode:  403,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, baseURL+"/api/internal/stats", nil)
+			request.Header.Add("X-Real-IP", tt.realipRequest)
+			w := httptest.NewRecorder()
+
+			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+
+			cfg := config.Config{
+				BaseURL:        baseURL,
+				SecretKey:      secretKey,
+				CookieAuthName: cookieAuthName,
+				TrustedSubnet:  tt.trustedNet,
+			}
+
+			d, err := storage.NewDictionary(cfg)
+			require.NoError(t, err)
+
+			h := http.Server{
+				Handler: NewURLHandler(d, cfg, dChan),
+			}
+
+			h.Handler.ServeHTTP(w, request)
+
+			result := w.Result()
+			defer w.Result().Body.Close()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
+		})
+	}
+}
+
+func TestMiddleware_gzip(t *testing.T) {
+	type want struct {
+		contentType string
+		statusCode  int
+	}
+
+	tests := []struct {
+		name            string
+		acceptEncoding  string
+		contentEncoding string
+		body            []byte
+		want            want
+	}{
+		{
+			name:            "bad gzip",
+			contentEncoding: "gzip",
+			want: want{
+				contentType: "text/plain; charset=utf-8",
+				statusCode:  400,
+			},
+		},
+		{
+			name:           "accept gzip",
+			acceptEncoding: "gzip",
+			want: want{
+				contentType: "",
+				statusCode:  200,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, baseURL+"/ping", nil)
+			request.Header.Add("Content-Encoding", tt.contentEncoding)
+			request.Header.Add("Accept-Encoding", tt.acceptEncoding)
+			w := httptest.NewRecorder()
+
+			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+
+			cfg := config.Config{
+				BaseURL:        baseURL,
+				SecretKey:      secretKey,
+				CookieAuthName: cookieAuthName,
+			}
+
+			d, err := storage.NewDictionary(cfg)
+			require.NoError(t, err)
+
+			h := http.Server{
+				Handler: NewURLHandler(d, cfg, dChan),
+			}
+
+			h.Handler.ServeHTTP(w, request)
+
+			result := w.Result()
+			defer w.Result().Body.Close()
+
+			assert.Equal(t, tt.want.statusCode, result.StatusCode)
+			assert.Equal(t, tt.want.contentType, result.Header.Get("Content-Type"))
+		})
+	}
+
 }

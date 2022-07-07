@@ -1268,7 +1268,126 @@ func TestPostgresPostAPIBatch(t *testing.T) {
 
 	batchArray := &BatchRequestArray{batch}
 
-	val, err := repo.PostAPIBatch(context.Background(), batchArray, "", i.ID)
+	val, err := repo.PostAPIBatch(context.Background(), batchArray, "prefix", i.ID)
 	require.NoError(t, err)
 	require.NotEmpty(t, val)
+}
+
+func TestPostgresPing(t *testing.T) {
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+	defer func() {
+		repo.Close()
+	}()
+
+	mock.ExpectPing()
+
+	err := repo.Ping(context.Background())
+	require.NoError(t, err)
+}
+
+func TestPostgresDeleteUserURL(t *testing.T) {
+	var i = &tableModel{
+		ID:       1,
+		ShortURL: "shortURL",
+	}
+
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+	defer func() {
+		repo.Close()
+	}()
+
+	query := "UPDATE shortener SET deleted_at \\= now\\(\\) WHERE user_id \\= \\$1 and short_url \\= ANY\\(\\$2\\);"
+
+	mock.ExpectExec(query).WithArgs(i.ID, sqlmock.AnyArg()).WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err := repo.DeleteUserURL(context.Background(), &DeletedShortURLValues{
+		[]string{i.ShortURL},
+		i.ID,
+	})
+
+	require.NoError(t, err)
+}
+
+func TestPostgresGetInternalStats(t *testing.T) {
+	db, mock := NewMock()
+	repo := &PostgresStorage{db, &sync.WaitGroup{}, nil}
+	defer func() {
+		repo.Close()
+	}()
+
+	user_cnt := 2
+	url_cnt := 3
+
+	query := "SELECT user_nested.user_cnt, url_nested.url_cnt " +
+		"FROM " +
+		"\\(SELECT COUNT\\(DISTINCT user_id\\) AS user_cnt FROM shortener WHERE deleted_at IS NULL\\) AS user_nested, " +
+		"\\(SELECT COUNT\\(\\*\\) AS url_cnt FROM shortener WHERE deleted_at IS NULL\\) AS url_nested;"
+
+	rows := sqlmock.NewRows([]string{"user_nested.user_cnt", "url_nested.url_cnt"}).AddRow(user_cnt, url_cnt)
+	mock.ExpectQuery(query).WithArgs().WillReturnRows(rows)
+
+	val, err := repo.GetInternalStats(context.Background())
+
+	require.NoError(t, err)
+	require.Equal(t, user_cnt, val.Users)
+	require.Equal(t, url_cnt, val.URLs)
+
+}
+
+func TestDictionaryClose(t *testing.T) {
+	d := &Dictionary{
+		Items:     map[string]string{},
+		UserItems: map[int32][]string{},
+	}
+	err := d.Close()
+	require.NoError(t, err)
+}
+
+func TestDictionaryGetInternalStats(t *testing.T) {
+	d := &Dictionary{
+		Items:     map[string]string{},
+		UserItems: map[int32][]string{},
+	}
+	val, err := d.GetInternalStats(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 0, val.URLs)
+	require.Equal(t, 0, val.Users)
+}
+
+func TestUserLinkedListPing(t *testing.T) {
+	ll := &UsersLinkedListMemoryStorage{
+		LinkedListStorage: map[int32]*LinkedListURLItem{},
+	}
+	err := ll.Ping(context.Background())
+	require.NoError(t, err)
+}
+
+func TestUserLinkedListClose(t *testing.T) {
+	ll := &UsersLinkedListMemoryStorage{
+		LinkedListStorage: map[int32]*LinkedListURLItem{},
+	}
+	err := ll.Close()
+	require.NoError(t, err)
+}
+
+func TestUserLinkedListGetInternalStats(t *testing.T) {
+	ui := &URLItem{
+		ShortURLValue:    "short URL",
+		OriginalURLValue: "original URL",
+		Next:             nil,
+	}
+	ll := &UsersLinkedListMemoryStorage{
+		LinkedListStorage: map[int32]*LinkedListURLItem{
+			0: {
+				Tail: ui,
+				Head: ui,
+			},
+		},
+	}
+	val, err := ll.GetInternalStats(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, 1, val.Users)
+	require.Equal(t, 1, val.URLs)
 }

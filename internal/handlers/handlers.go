@@ -267,10 +267,6 @@ func (h *Handler) NotFound() http.HandlerFunc {
 func (h *Handler) GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idValue := chi.URLParam(r, "idValue")
-		if idValue == "" {
-			http.Error(w, "Bad request!", http.StatusBadRequest)
-			return
-		}
 		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotExistRecord) {
@@ -489,6 +485,11 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 // @Router /api/internal/stats [get]
 func (h *Handler) GetInternalStats() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if h.trustedNet == nil {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
 		if !h.trustedNet.Contains(net.ParseIP(r.Header.Get("X-Real-IP"))) {
 			w.WriteHeader(http.StatusForbidden)
 			return
