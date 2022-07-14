@@ -5,19 +5,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync"
-
 	"io"
 	"math/rand"
-	"time"
-
 	"os"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
+
+	"github.com/alexkopcak/shortener/internal/config"
 )
 
 const (
@@ -52,6 +51,7 @@ type Storage interface {
 	AddURL(ctx context.Context, longURLValue string, shortURLValue string, userID int32) (string, error)
 	GetURL(ctx context.Context, shortURLValue string) (string, error)
 	GetUserURL(ctx context.Context, prefix string, userID int32) ([]UserExportType, error)
+	GetInternalStats(ctx context.Context) (InternalStats, error)
 	PostAPIBatch(ctx context.Context, shortURLArray *BatchRequestArray, prefix string, userID int32) (*BatchResponseArray, error)
 	Ping(ctx context.Context) error
 	DeleteUserURL(ctx context.Context, deletedURL *DeletedShortURLValues) error
@@ -61,7 +61,7 @@ type Storage interface {
 // func InitializeStorage implements the choice of storage depending on the configuration, returns the storage interface.
 func InitializeStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	if strings.TrimSpace(cfg.DBConnectionString) == "" {
-		return NewDictionary(cfg)
+		return NewDictionary(cfg, wg, dChannel)
 	}
 	return NewPostgresStorage(cfg, wg, dChannel)
 }
@@ -77,7 +77,7 @@ type PostgresStorage struct {
 func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *DeletedShortURLValues) (Storage, error) {
 	ps, err := sql.Open("pgx", cfg.DBConnectionString)
 	if err != nil {
-		return NewDictionary(cfg)
+		return NewDictionary(cfg, wg, dChannel)
 	}
 
 	var cnt int
@@ -86,7 +86,7 @@ func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *De
 	if cnt != 1 || err != nil {
 		_, err = ps.ExecContext(context.Background(), "CREATE DATABASE shortener_db OWNER postgres;")
 		if err != nil {
-			return NewDictionary(cfg)
+			return NewDictionary(cfg, wg, dChannel)
 		}
 	}
 
@@ -94,7 +94,7 @@ func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *De
 	if err != nil {
 		_, err = ps.ExecContext(context.Background(), "CREATE TABLE shortener (user_id INTEGER, short_url VARCHAR(5), original_url VARCHAR(255), deleted_at TIMESTAMP, UNIQUE(user_id, original_url));")
 		if err != nil {
-			return NewDictionary(cfg)
+			return NewDictionary(cfg, wg, dChannel)
 		}
 	}
 
@@ -104,7 +104,7 @@ func NewPostgresStorage(cfg config.Config, wg *sync.WaitGroup, dChannel chan *De
 		DeleteChannel: dChannel,
 	}
 
-	pstorage.StartDeleteWorker()
+	pstorage.startDeleteWorker()
 
 	return pstorage, nil
 }
@@ -257,18 +257,18 @@ func (ps *PostgresStorage) Ping(ctx context.Context) error {
 }
 
 // func StartDeleteWorker launches three delete workers.
-func (ps *PostgresStorage) StartDeleteWorker() {
+func (ps *PostgresStorage) startDeleteWorker() {
 	workerCount := 3
 
 	for i := 0; i < workerCount; i++ {
 		ps.WaitGroup.Add(1)
-		go ps.DeleteWorker()
+		go ps.deleteWorker()
 	}
 }
 
 // func DeleteWorker is a listened the DeleteChannel worker.
 // when a value is received through the channel, worker starts DeleteUserURL func.
-func (ps *PostgresStorage) DeleteWorker() {
+func (ps *PostgresStorage) deleteWorker() {
 	defer ps.WaitGroup.Done()
 
 	for job := range ps.DeleteChannel {
@@ -296,15 +296,31 @@ func (ps *PostgresStorage) Close() error {
 	return ps.db.Close()
 }
 
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (ps *PostgresStorage) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	internalStats := InternalStats{}
+	err := ps.db.QueryRowContext(ctx,
+		"SELECT user_nested.user_cnt, url_nested.url_cnt "+
+			"FROM "+
+			"(SELECT COUNT(DISTINCT user_id) AS user_cnt FROM shortener WHERE deleted_at IS NULL) AS user_nested, "+
+			"(SELECT COUNT(*) AS url_cnt FROM shortener WHERE deleted_at IS NULL) AS url_nested;").
+		Scan(&internalStats.Users, &internalStats.URLs)
+
+	return internalStats, err
+}
+
 // type Dictionary - memory storage implementation.
 type Dictionary struct {
+	WaitGroup     *sync.WaitGroup
+	DeleteChannel chan *DeletedShortURLValues
+
 	Items           map[string]string
 	UserItems       map[int32][]string
 	fileStoragePath string
 }
 
 // func NewDictionary create a new memory storage object.
-func NewDictionary(cfg config.Config) (Storage, error) {
+func NewDictionary(cfg config.Config, wg *sync.WaitGroup, dChan chan *DeletedShortURLValues) (Storage, error) {
 	items := make(map[string]string)
 	userItems := make(map[int32][]string)
 
@@ -327,11 +343,16 @@ func NewDictionary(cfg config.Config) (Storage, error) {
 		}
 	}
 
-	return &Dictionary{
+	dic := &Dictionary{
 		Items:           items,
 		UserItems:       userItems,
 		fileStoragePath: cfg.FileStoragePath,
-	}, nil
+		WaitGroup:       wg,
+		DeleteChannel:   dChan,
+	}
+
+	dic.startDeleteWorker()
+	return dic, nil
 }
 
 // func AddURL add original URL value to memory storage.
@@ -420,6 +441,26 @@ func (d *Dictionary) Ping(ctx context.Context) error {
 	return nil
 }
 
+// func StartDeleteWorker launches three delete workers.
+func (d *Dictionary) startDeleteWorker() {
+	workerCount := 3
+
+	for i := 0; i < workerCount; i++ {
+		d.WaitGroup.Add(1)
+		go d.deleteWorker()
+	}
+}
+
+// func DeleteWorker is a listened the DeleteChannel worker.
+// when a value is received through the channel, worker starts DeleteUserURL func.
+func (d *Dictionary) deleteWorker() {
+	defer d.WaitGroup.Done()
+
+	for job := range d.DeleteChannel {
+		d.DeleteUserURL(context.Background(), job)
+	}
+}
+
 // func DeleteUserURL delete user URLs from memory storage
 func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShortURLValues) error {
 	if deletedURLs == nil {
@@ -454,6 +495,14 @@ func (d *Dictionary) DeleteUserURL(ctx context.Context, deletedURLs *DeletedShor
 // func Close inteface plug.
 func (d *Dictionary) Close() error {
 	return nil
+}
+
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (d *Dictionary) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	return InternalStats{
+		URLs:  len(d.Items),
+		Users: len(d.UserItems),
+	}, nil
 }
 
 // type URLItem is a linked list storage item.
@@ -653,4 +702,23 @@ func (l UsersLinkedListMemoryStorage) DeleteUserURL(ctx context.Context, deleted
 // func Close interface plug.
 func (l UsersLinkedListMemoryStorage) Close() error {
 	return nil
+}
+
+// func GetInternalStats counts the number of URLs and the number of users in the service.
+func (l UsersLinkedListMemoryStorage) GetInternalStats(ctx context.Context) (InternalStats, error) {
+	counter := 0
+	for _, v := range l.LinkedListStorage {
+		currentItem := v.Head
+		for currentItem != nil {
+			counter++
+			currentItem = currentItem.Next
+		}
+	}
+
+	internalStats := InternalStats{
+		URLs:  counter,
+		Users: len(l.LinkedListStorage),
+	}
+
+	return internalStats, nil
 }

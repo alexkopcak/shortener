@@ -16,12 +16,18 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+
 	"github.com/alexkopcak/shortener/internal/config"
-	"github.com/alexkopcak/shortener/internal/handlers"
+	handlersgrpc "github.com/alexkopcak/shortener/internal/handlers/grpchandlers"
+	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
+	handlers "github.com/alexkopcak/shortener/internal/handlers/resthandlers"
 	"github.com/alexkopcak/shortener/internal/storage"
 )
 
@@ -30,20 +36,30 @@ const (
 	keyFile  = "localhost.key"
 )
 
-func Run(cfg config.Config) error {
-	wg := &sync.WaitGroup{}
-	dChannel := make(chan *storage.DeletedShortURLValues)
+type App struct {
+	wg         *sync.WaitGroup
+	repository storage.Storage
+	cfg        *config.Config
+	restServer *http.Server
+	grpcServer *grpc.Server
+	dChannel   chan *storage.DeletedShortURLValues
+}
+
+func NewApp(conf config.Config) *App {
+	return &App{
+		cfg: &conf,
+	}
+}
+
+func (a *App) Run() error {
+	a.wg = &sync.WaitGroup{}
+	a.dChannel = make(chan *storage.DeletedShortURLValues)
 
 	// Repository
-	repository, err := storage.InitializeStorage(cfg, wg, dChannel)
+	var err error
+	a.repository, err = storage.InitializeStorage(*a.cfg, a.wg, a.dChannel)
 	if err != nil {
 		return err
-	}
-
-	//HTTP Server
-	server := &http.Server{
-		Addr:    cfg.ServerAddr,
-		Handler: handlers.URLHandler(repository, cfg, dChannel),
 	}
 
 	// the channel notifying about the closure of connections
@@ -56,46 +72,125 @@ func Run(cfg config.Config) error {
 	go func() {
 		<-sigint
 
-		if err = server.Shutdown(context.Background()); err != nil {
-			log.Printf("HTTP server Shutdown: %v", err)
-		}
-
 		close(iddleConnsClosed)
 	}()
 
-	log.Printf("server start on %v", cfg.ServerAddr)
-
-	// start server
-	if cfg.EnableHTTPS {
-		if !exists(keyFile) {
-			if err = keyFileCreate(); err != nil {
-				return err
-			}
+	go func() {
+		<-iddleConnsClosed
+		if err = a.restServer.Shutdown(context.Background()); err != nil {
+			log.Printf("HTTP server Shutdown: %v", err)
 		}
-		if !exists(certFile) {
-			if err = certFileCreate(); err != nil {
-				return err
-			}
+	}()
+
+	go func() {
+		<-iddleConnsClosed
+		if a.grpcServer != nil {
+			a.grpcServer.GracefulStop()
 		}
+	}()
 
-		err = server.ListenAndServeTLS(certFile, keyFile)
-	} else {
-		err = server.ListenAndServe()
-	}
-	if err != http.ErrServerClosed {
-		log.Fatalf("HTTP server ListenAndServe: %v", err)
-	}
+	// start servers and wait
+	a.start()
 
-	<-iddleConnsClosed
-
-	err = repository.Close()
+	err = a.repository.Close()
 
 	close(sigint)
-	close(dChannel)
-	wg.Wait()
+	close(a.dChannel)
 
 	log.Println("server shutdown gracefully")
 	return err
+}
+
+func (a *App) start() {
+	if a.cfg.EnableHTTPS {
+		if err := checkKeyAndCert(); err != nil {
+			log.Fatal(err)
+		}
+	}
+	a.wg.Add(1)
+	go func() {
+		err := a.startREST()
+		if err != http.ErrServerClosed {
+			log.Fatalf("HTTP server ListenAndServe: %v", err)
+		}
+		a.wg.Done()
+	}()
+	a.wg.Add(1)
+	go func() {
+		err := a.startGRPC()
+		if err != nil && err != grpc.ErrServerStopped {
+			log.Fatalf("gRPC server ListenAndServe: %v", err)
+		}
+		a.wg.Done()
+	}()
+	a.wg.Wait()
+}
+
+func (a *App) startREST() error {
+	//HTTP Server
+	a.restServer = &http.Server{
+		Addr:    a.cfg.ServerAddr,
+		Handler: handlers.NewURLHandler(a.repository, *a.cfg, a.dChannel),
+	}
+	var err error
+
+	// start server
+	log.Printf("rest server start on %v", a.cfg.ServerAddr)
+	if a.cfg.EnableHTTPS {
+		err = a.restServer.ListenAndServeTLS(certFile, keyFile)
+	} else {
+		err = a.restServer.ListenAndServe()
+	}
+	return err
+}
+
+func (a *App) startGRPC() error {
+	if strings.TrimSpace(a.cfg.GrpcAddr) == "" {
+		return nil
+	}
+
+	listen, err := net.Listen("tcp", a.cfg.GrpcAddr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	interceptor := handlersgrpc.NewAuthServerInterceptor(a.cfg)
+
+	opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(interceptor.Unary()),
+	}
+	if a.cfg.EnableHTTPS {
+		creds, err := credentials.NewServerTLSFromFile(certFile, keyFile)
+		if err != nil {
+			log.Fatalf("failed to generate credentials, err: %v", err)
+		}
+		opts = append(opts, grpc.Creds(creds))
+	}
+
+	a.grpcServer = grpc.NewServer(
+		opts...,
+	)
+
+	pb.RegisterShortenerServer(a.grpcServer,
+		handlersgrpc.NewGRPCHandler(&a.repository, *a.cfg, a.dChannel))
+
+	log.Printf("grpc server start on %v", a.cfg.GrpcAddr)
+	return a.grpcServer.Serve(listen)
+}
+
+func checkKeyAndCert() error {
+	var err error
+	if !exists(keyFile) {
+		if err = keyFileCreate(); err != nil {
+			return err
+		}
+	}
+	if !exists(certFile) {
+		if err = certFileCreate(); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func exists(path string) bool {

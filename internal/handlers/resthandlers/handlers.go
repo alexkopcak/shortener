@@ -2,31 +2,28 @@
 package handlers
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
 
-	"github.com/alexkopcak/shortener/internal/config"
-	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
 
-	"net/http/pprof"
+	"github.com/alexkopcak/shortener/internal/config"
+	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
+	"github.com/alexkopcak/shortener/internal/storage"
 )
 
 // type Handler - handler class.
 type (
 	Handler struct {
+		trustedNet *net.IPNet
 		*chi.Mux
 		dChannel chan *storage.DeletedShortURLValues
 		Repo     storage.Storage
@@ -49,13 +46,14 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 	return w.Writer.Write(b)
 }
 
-// URLHandler create handler object and set handlers endpoints.
-func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
+// NewURLHandler create handler object and set handlers endpoints.
+func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
-		Mux:      chi.NewMux(),
-		Repo:     repo,
-		Cfg:      cfg,
-		dChannel: dChan,
+		Mux:        chi.NewMux(),
+		Repo:       repo,
+		Cfg:        cfg,
+		dChannel:   dChan,
+		trustedNet: handlershelper.SetTrustedSubnet(cfg.TrustedSubnet),
 	}
 
 	h.Mux.Use(h.authMiddlewareHandler)
@@ -68,6 +66,7 @@ func URLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.Del
 	h.Mux.Post("/api/shorten", h.PostAPIHandler())
 	h.Mux.Post("/api/shorten/batch", h.PostAPIBatchHandler())
 	h.Mux.Delete("/api/user/urls", h.DeleteUserURLHandler())
+	h.Mux.Get("/api/internal/stats", h.GetInternalStats())
 
 	h.Mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
 	h.Mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
@@ -160,46 +159,27 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int32, error) {
 		return 0, http.ErrNoCookie
 	}
 
-	data, err := hex.DecodeString(cookie.Value)
+	id, err := handlershelper.DecodeJWT(h.Cfg.SecretKey, cookie.Value)
 	if err != nil {
+		if errors.Is(err, handlershelper.ErrNotEqual) {
+			return 0, http.ErrNoCookie
+		}
 		return 0, err
 	}
-
-	var id int32
-	err = binary.Read(bytes.NewReader(data[:4]), binary.BigEndian, &id)
-	if err != nil {
-		return 0, err
-	}
-
-	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
-	hm.Write(data[:4])
-	sign := hm.Sum(nil)
-	if hmac.Equal(data[4:], sign) {
-		return id, nil
-	}
-	return 0, http.ErrNoCookie
+	return id, err
 }
 
 func (h *Handler) generateAuthCookie() (*http.Cookie, int32, error) {
-	id := make([]byte, 4)
+	sign, id, err := handlershelper.GenerateJWT(h.Cfg.SecretKey)
 
-	_, err := rand.Read(id)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
-	hm.Write(id)
-	sign := hex.EncodeToString(append(id, hm.Sum(nil)...))
-
-	var result int32
-	err = binary.Read(bytes.NewReader(id), binary.BigEndian, &result)
-
 	return &http.Cookie{
 			Name:  h.Cfg.CookieAuthName,
 			Value: sign,
 		},
-		result,
+		id,
 		err
 }
 
@@ -247,10 +227,6 @@ func (h *Handler) NotFound() http.HandlerFunc {
 func (h *Handler) GetHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		idValue := chi.URLParam(r, "idValue")
-		if idValue == "" {
-			http.Error(w, "Bad request!", http.StatusBadRequest)
-			return
-		}
 		longURLValue, err := h.Repo.GetURL(r.Context(), idValue)
 		if err != nil {
 			if errors.Is(err, storage.ErrNotExistRecord) {
@@ -455,6 +431,40 @@ func (h *Handler) PostHandler() http.HandlerFunc {
 		}
 		_, err = w.Write([]byte(h.Cfg.BaseURL + "/" + requestValue))
 		if err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
+	}
+}
+
+// GetInternalStats godoc
+// @Summary get short URL value
+// @Tags Storage
+// @Success 200 {string} string
+// @Failure 403, 400 {string} string
+// @Router /api/internal/stats [get]
+func (h *Handler) GetInternalStats() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.trustedNet == nil {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		if !h.trustedNet.Contains(net.ParseIP(r.Header.Get("X-Real-IP"))) {
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+
+		stats, err := h.Repo.GetInternalStats(r.Context())
+		if err != nil {
+			http.Error(w, "Something went wrong!", http.StatusBadRequest)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		if err = json.NewEncoder(w).Encode(&stats); err != nil {
 			http.Error(w, "Something went wrong!", http.StatusBadRequest)
 			return
 		}

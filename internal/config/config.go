@@ -20,6 +20,8 @@ type Config struct {
 	CookieAuthName     string `json:"-" env:"COOKIE_ATUH_NAME"`
 	DBConnectionString string `json:"database_dsn" env:"DATABASE_DSN"`
 	ConfigPath         string `json:"-" env:"CONFIG"`
+	TrustedSubnet      string `json:"trusted_subnet" env:"TRUSTED_SUBNET"`
+	GrpcAddr           string `json:"grpc__server_address" env:"GRPC_SERVER_ADDRESS"`
 	EnableHTTPS        bool   `json:"enable_https" env:"ENABLE_HTTPS"`
 }
 
@@ -34,6 +36,8 @@ func (c *Config) SetDefaultValues() {
 	c.CookieAuthName = "shortenerId"
 	c.DBConnectionString = "postgres://postgres:mypassword@localhost:5432/shortener_db"
 	c.EnableHTTPS = false
+	c.TrustedSubnet = ""
+	c.GrpcAddr = ""
 }
 
 func NewConfig() (Config, error) {
@@ -122,6 +126,8 @@ func (c *Config) GetFlagConfiguration() {
 	flag.BoolVar(&c.EnableHTTPS, "s", c.EnableHTTPS, "Enable HTTPS")
 	flag.StringVar(&c.ConfigPath, "c", c.ConfigPath, "Config file path")
 	flag.StringVar(&c.ConfigPath, "config", c.ConfigPath, "Config file path")
+	flag.StringVar(&c.TrustedSubnet, "t", c.TrustedSubnet, "Trusted subnet CIDR notation")
+	flag.StringVar(&c.GrpcAddr, "g", c.GrpcAddr, "gRPC port, example :8181")
 
 	flag.Parse()
 }
