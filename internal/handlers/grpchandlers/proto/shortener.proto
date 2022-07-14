@@ -1,0 +1,101 @@
+syntax = "proto3";
+
+package shortener.grpc;
+
+option go_package = "./shortener.grpc";
+
+// Empty represent empty message
+message Empty{}
+
+// // Status represent message with error result 
+// message Status{
+//   string error = 1;
+// }
+
+// URLRequest represent OriginalURL value
+message URLRequest {
+  string value = 1;
+}
+
+// URLResponse represent grpc server response message with ShortURL value and error description
+message URLResponse {
+  string value = 1;
+//  string error = 2;
+}
+
+// AnyURLRequest represent array of OriginalURL values and OriginalURL values count
+message AnyURLRequest {
+  int32 count = 1;
+  repeated string values = 2;
+}
+
+// AnyURLResponse represent array of ShortURL and OriginalURL pairs, array length and error 
+message AnyURLResponse {
+  message ShortOriginalURLPairs {
+    string shortURL = 1;
+    string originalURL = 2;
+  }
+  int32 count = 1;
+  repeated ShortOriginalURLPairs values = 2;
+//  string error = 3;
+}
+
+// BatchRequestArray represent array of CorrelationID and OriginalURL pairs and array length
+message BatchRequestArray {
+  message BatchRequest {
+    string correlation_id = 1;
+    string original_url = 2;
+  }    
+  int32 count = 1;
+  repeated BatchRequest original_urls = 2;
+}
+
+// BatchResponseArray represent array of CorrelationID and ShortURL pairs, array length and error
+message BatchResponseArray {
+  message BatchResponse {
+    string correlation_id = 1;
+    string short_url = 2;
+  }
+  int32 count = 1;
+  repeated BatchResponse short_urls = 2;
+//  string error = 3;
+}
+
+// InternalStatsResponse represent URLs and Users count, and error value
+message InternalStatsResponse {
+  int32 urls_count = 1;
+  int32 users_count = 2;
+//  string error = 3;
+}
+
+// Token represent token value
+message Token{
+  string value = 1;
+}
+
+// Interface exported by the server
+service Shortener {
+  // Get token value
+  rpc Login(Empty) returns(Token){}
+
+  // Obtains OriginalURL for ShortURL value
+  rpc GetURL(URLRequest) returns (URLResponse) {}
+  
+  // Obtains all URLs saved by the user in the format of pairs of OriginURL and ShortURL
+  rpc GetAllURL(Empty) returns (AnyURLResponse) {}
+  
+  // Obtain ShortURL value for OriginalURL and save it at storage
+  rpc PostURL(URLRequest) returns (URLResponse) {}
+
+  // Obtain ShortURL value for OriginalURL and save it at storage
+  rpc PostAPIurl(URLRequest) returns (URLResponse) {}
+
+  // Obtain ShortURL values for OriginalURL at batch request and save values at storage
+  rpc PostAPIBatch(BatchRequestArray) returns(BatchResponseArray) {}
+
+  // Delete stored URL values by ShortURL
+  rpc DeleteURLs(AnyURLRequest) returns(Empty) {}
+
+  // Generate Internal Stats get URLs and Users count
+  rpc GetInternalStats(Empty) returns(InternalStatsResponse) {}
+}

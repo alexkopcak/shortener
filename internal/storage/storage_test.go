@@ -43,7 +43,8 @@ func TestDictionaryAddURL(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := NewDictionary(config.Config{})
+			dChan := make(chan *DeletedShortURLValues)
+			d, err := NewDictionary(config.Config{}, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 			ctx := context.Background()
 			got, err := d.AddURL(ctx, tt.longURLValue, ShortURLGenerator(), 0)
@@ -389,7 +390,9 @@ func BenchmarkDictionaryStorage(b *testing.B) {
 	dic, err := NewDictionary(config.Config{
 		DBConnectionString: "",
 		FileStoragePath:    "",
-	})
+	}, &sync.WaitGroup{},
+		make(chan *DeletedShortURLValues))
+
 	if err != nil {
 		panic(err)
 	}
@@ -587,7 +590,9 @@ func TestDictionaryNewDictionaryWithStorage(t *testing.T) {
 
 			require.NoError(t, err)
 
-			d, err := NewDictionary(cfg)
+			dChan := make(chan *DeletedShortURLValues)
+
+			d, err := NewDictionary(cfg, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 			assert.Len(t, d.(*Dictionary).Items, 1)
 

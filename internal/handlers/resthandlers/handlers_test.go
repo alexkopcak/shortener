@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/alexkopcak/shortener/internal/config"
@@ -311,7 +312,11 @@ func TestURLHandler(t *testing.T) {
 				request = httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			}
 			w := httptest.NewRecorder()
-			d, err := storage.NewDictionary(config.Config{})
+
+			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+
+			d, err := storage.NewDictionary(config.Config{}, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 
 			if len(tt.repo.Items) > 0 {
@@ -319,7 +324,6 @@ func TestURLHandler(t *testing.T) {
 					d.AddURL(request.Context(), v, storage.ShortURLGenerator(), 0)
 				}
 			}
-			dChan := make(chan *storage.DeletedShortURLValues)
 
 			h := http.Server{
 				Handler: NewURLHandler(d, config.Config{
@@ -357,6 +361,7 @@ func TestURLHandler(t *testing.T) {
 				request2 := httptest.NewRequest(http.MethodGet, string(requestResult), nil)
 				w2 := httptest.NewRecorder()
 				dChan := make(chan *storage.DeletedShortURLValues)
+				defer close(dChan)
 
 				h2 := http.Server{
 					Handler: NewURLHandler(d, config.Config{
@@ -392,14 +397,27 @@ func TestCookie(t *testing.T) {
 			method:   http.MethodPost,
 			cookie:   "",
 		},
+		{
+			name:     "bad cookie value",
+			target:   baseURL,
+			template: "%s",
+			body:     "http://abc.test/abc/abd",
+			method:   http.MethodPost,
+			cookie:   "id=id",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
+			if tt.cookie != "" {
+				request.AddCookie(&http.Cookie{Name: "id", Value: tt.cookie})
+			}
 			w := httptest.NewRecorder()
-			d, err := storage.NewDictionary(config.Config{})
 			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+
+			d, err := storage.NewDictionary(config.Config{}, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 			h := http.Server{
 				Handler: NewURLHandler(d, config.Config{
@@ -417,6 +435,7 @@ func TestCookie(t *testing.T) {
 
 			request2 := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(fmt.Sprintf(tt.template, tt.body))))
 			for _, v := range cookie {
+				fmt.Printf("%v\n", v)
 				request2.AddCookie(v)
 			}
 
@@ -477,10 +496,10 @@ func TestHandler_DeleteUserURLHandler(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.template)))
 			w := httptest.NewRecorder()
-			d, err := storage.NewDictionary(config.Config{})
+			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+			d, err := storage.NewDictionary(config.Config{}, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
-
-			dChan := make(chan *storage.DeletedShortURLValues, 1)
 
 			h := http.Server{
 				Handler: NewURLHandler(d, config.Config{
@@ -491,8 +510,6 @@ func TestHandler_DeleteUserURLHandler(t *testing.T) {
 			}
 
 			h.Handler.ServeHTTP(w, request)
-
-			close(dChan)
 
 			result := w.Result()
 
@@ -537,10 +554,10 @@ func TestHandler_Ping(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			request := httptest.NewRequest(tt.method, tt.target, bytes.NewBuffer([]byte(tt.template)))
 			w := httptest.NewRecorder()
-			d, err := storage.NewDictionary(config.Config{})
-			require.NoError(t, err)
+			dChan := make(chan *storage.DeletedShortURLValues)
 
-			dChan := make(chan *storage.DeletedShortURLValues, 1)
+			d, err := storage.NewDictionary(config.Config{}, &sync.WaitGroup{}, dChan)
+			require.NoError(t, err)
 
 			h := http.Server{
 				Handler: NewURLHandler(d, config.Config{
@@ -618,6 +635,8 @@ func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			dChan := make(chan *storage.DeletedShortURLValues)
+			defer close(dChan)
+
 			h := http.Server{
 				Handler: NewURLHandler(&tt.repo, config.Config{
 					BaseURL:        baseURL,
@@ -636,9 +655,6 @@ func TestHandler_GetAPIAllURLHandler(t *testing.T) {
 			}
 
 			h.Handler.ServeHTTP(w, request)
-
-			close(dChan)
-
 			result := w.Result()
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
@@ -707,14 +723,14 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 			w := httptest.NewRecorder()
 
 			dChan := make(chan *storage.DeletedShortURLValues)
-
+			defer close(dChan)
 			cfg := config.Config{
 				BaseURL:        baseURL,
 				SecretKey:      secretKey,
 				CookieAuthName: cookieAuthName,
 			}
 
-			d, err := storage.NewDictionary(cfg)
+			d, err := storage.NewDictionary(cfg, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 
 			h := http.Server{
@@ -724,8 +740,6 @@ func TestHandler_PostAPIBatchHandler(t *testing.T) {
 			h.Handler.ServeHTTP(w, request)
 
 			result := w.Result()
-
-			close(dChan)
 
 			assert.Equal(t, tt.want.statusCode, result.StatusCode)
 			require.NoError(t, err)
@@ -802,7 +816,7 @@ func TestHandler_GetInternalStats(t *testing.T) {
 				TrustedSubnet:  tt.trustedNet,
 			}
 
-			d, err := storage.NewDictionary(cfg)
+			d, err := storage.NewDictionary(cfg, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 
 			h := http.Server{
@@ -866,7 +880,7 @@ func TestMiddleware_gzip(t *testing.T) {
 				CookieAuthName: cookieAuthName,
 			}
 
-			d, err := storage.NewDictionary(cfg)
+			d, err := storage.NewDictionary(cfg, &sync.WaitGroup{}, dChan)
 			require.NoError(t, err)
 
 			h := http.Server{

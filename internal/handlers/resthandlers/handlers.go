@@ -2,23 +2,17 @@
 package handlers
 
 import (
-	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/hmac"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 
 	"github.com/alexkopcak/shortener/internal/config"
+	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
 	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/asaskevich/govalidator"
 	"github.com/go-chi/chi/v5"
@@ -55,13 +49,12 @@ func (w gzipWriter) Write(b []byte) (int, error) {
 // NewURLHandler create handler object and set handlers endpoints.
 func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.DeletedShortURLValues) *Handler {
 	h := &Handler{
-		Mux:      chi.NewMux(),
-		Repo:     repo,
-		Cfg:      cfg,
-		dChannel: dChan,
+		Mux:        chi.NewMux(),
+		Repo:       repo,
+		Cfg:        cfg,
+		dChannel:   dChan,
+		trustedNet: handlershelper.SetTrustedSubnet(cfg.TrustedSubnet),
 	}
-
-	h.setTrustedSubnet(cfg.TrustedSubnet)
 
 	h.Mux.Use(h.authMiddlewareHandler)
 	h.Mux.Use(gzipMiddlewareHandle)
@@ -86,20 +79,6 @@ func NewURLHandler(repo storage.Storage, cfg config.Config, dChan chan *storage.
 	h.Mux.NotFound(h.NotFound())
 
 	return h
-}
-
-func (h *Handler) setTrustedSubnet(subnet string) {
-	if strings.TrimSpace(subnet) == "" {
-		h.trustedNet = nil
-		return
-	}
-	_, trustedNet, err := net.ParseCIDR(subnet)
-	if err != nil {
-		trustedNet = nil
-		log.Printf("%s\n", err)
-		log.Printf("bad trusted subnet value \"%s\" ; trusted subnet is empty value\n", subnet)
-	}
-	h.trustedNet = trustedNet
 }
 
 // DeleteUserURLHandler godoc
@@ -180,46 +159,27 @@ func (h *Handler) decodeAuthCookie(cookie *http.Cookie) (int32, error) {
 		return 0, http.ErrNoCookie
 	}
 
-	data, err := hex.DecodeString(cookie.Value)
+	id, err := handlershelper.DecodeJWT(h.Cfg.SecretKey, cookie.Value)
 	if err != nil {
+		if errors.Is(err, handlershelper.ErrNotEqual) {
+			return 0, http.ErrNoCookie
+		}
 		return 0, err
 	}
-
-	var id int32
-	err = binary.Read(bytes.NewReader(data[:4]), binary.BigEndian, &id)
-	if err != nil {
-		return 0, err
-	}
-
-	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
-	hm.Write(data[:4])
-	sign := hm.Sum(nil)
-	if hmac.Equal(data[4:], sign) {
-		return id, nil
-	}
-	return 0, http.ErrNoCookie
+	return id, err
 }
 
 func (h *Handler) generateAuthCookie() (*http.Cookie, int32, error) {
-	id := make([]byte, 4)
+	sign, id, err := handlershelper.GenerateJWT(h.Cfg.SecretKey)
 
-	_, err := rand.Read(id)
 	if err != nil {
 		return nil, 0, err
 	}
-
-	hm := hmac.New(sha256.New, []byte(h.Cfg.SecretKey))
-	hm.Write(id)
-	sign := hex.EncodeToString(append(id, hm.Sum(nil)...))
-
-	var result int32
-	err = binary.Read(bytes.NewReader(id), binary.BigEndian, &result)
-
 	return &http.Cookie{
 			Name:  h.Cfg.CookieAuthName,
 			Value: sign,
 		},
-		result,
+		id,
 		err
 }
 

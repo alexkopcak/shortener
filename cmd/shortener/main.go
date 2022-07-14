@@ -27,7 +27,7 @@ func main() {
 	fmt.Println("Build date:", buildDate)
 	fmt.Println("Build commit:", buildCommit)
 
-	if err = app.Run(cfg); err != nil {
+	if err = app.NewApp(cfg).Run(); err != nil {
 		log.Fatal(err)
 	}
 }
