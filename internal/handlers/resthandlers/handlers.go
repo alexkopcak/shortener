@@ -9,15 +9,15 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/pprof"
 	"strings"
+
+	"github.com/asaskevich/govalidator"
+	"github.com/go-chi/chi/v5"
 
 	"github.com/alexkopcak/shortener/internal/config"
 	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
 	"github.com/alexkopcak/shortener/internal/storage"
-	"github.com/asaskevich/govalidator"
-	"github.com/go-chi/chi/v5"
-
-	"net/http/pprof"
 )
 
 // type Handler - handler class.

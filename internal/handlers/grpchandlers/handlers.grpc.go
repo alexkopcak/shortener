@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"net"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	"github.com/alexkopcak/shortener/internal/config"
 	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
 	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
 	"github.com/alexkopcak/shortener/internal/storage"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 type (

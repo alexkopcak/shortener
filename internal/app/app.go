@@ -21,14 +21,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/alexkopcak/shortener/internal/config"
-	handlersgrpc "github.com/alexkopcak/shortener/internal/handlers/grpchandlers"
-	handlers "github.com/alexkopcak/shortener/internal/handlers/resthandlers"
-	"github.com/alexkopcak/shortener/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 
+	"github.com/alexkopcak/shortener/internal/config"
+	handlersgrpc "github.com/alexkopcak/shortener/internal/handlers/grpchandlers"
 	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
+	handlers "github.com/alexkopcak/shortener/internal/handlers/resthandlers"
+	"github.com/alexkopcak/shortener/internal/storage"
 )
 
 const (

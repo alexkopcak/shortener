@@ -5,19 +5,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync"
-
 	"io"
 	"math/rand"
-	"time"
-
 	"os"
 	"strings"
+	"sync"
+	"time"
 
-	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/jackc/pgtype"
 	_ "github.com/jackc/pgx/v4"
 	_ "github.com/jackc/pgx/v4/stdlib"
+
+	"github.com/alexkopcak/shortener/internal/config"
 )
 
 const (

@@ -4,8 +4,9 @@ import (
 	"context"
 	"time"
 
-	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
 	"google.golang.org/grpc"
+
+	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
 )
 
 type AuthClient struct {

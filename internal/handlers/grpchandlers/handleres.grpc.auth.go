@@ -3,12 +3,13 @@ package handlersgrpc
 import (
 	"context"
 
-	"github.com/alexkopcak/shortener/internal/config"
-	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+
+	"github.com/alexkopcak/shortener/internal/config"
+	handlershelper "github.com/alexkopcak/shortener/internal/handlers"
 )
 
 type AuthServerInterceptor struct {

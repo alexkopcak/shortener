@@ -11,10 +11,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alexkopcak/shortener/internal/config"
-	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alexkopcak/shortener/internal/config"
+	"github.com/alexkopcak/shortener/internal/storage"
 )
 
 const (

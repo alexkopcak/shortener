@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
-	"github.com/alexkopcak/shortener/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alexkopcak/shortener/internal/config"
 )
 
 func TestDictionaryAddURL(t *testing.T) {

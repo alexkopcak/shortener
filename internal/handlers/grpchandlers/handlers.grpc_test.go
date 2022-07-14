@@ -8,14 +8,15 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/alexkopcak/shortener/client"
-	"github.com/alexkopcak/shortener/internal/config"
-	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
-	"github.com/alexkopcak/shortener/internal/storage"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
+
+	"github.com/alexkopcak/shortener/client"
+	"github.com/alexkopcak/shortener/internal/config"
+	pb "github.com/alexkopcak/shortener/internal/handlers/grpchandlers/proto"
+	"github.com/alexkopcak/shortener/internal/storage"
 )
 
 const bufSize = 1024 * 1024
